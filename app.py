@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from groq import Groq
 import os, random, json, io, base64
 from datetime import datetime
@@ -143,7 +143,14 @@ def cargar_fuente(tamano):
         return ImageFont.load_default()
 
 
+def abrir_imagen_segura(origen):
+    img = Image.open(origen)
+    img = ImageOps.exif_transpose(img)
+    return img.convert("RGB")
+
+
 def dividir_texto(texto, fuente, max_ancho):
+    texto = str(texto or "").strip()
     palabras = texto.split()
     lineas = []
     linea = ""
@@ -167,6 +174,7 @@ def dividir_texto(texto, fuente, max_ancho):
 
 
 def recortar_vertical(imagen, ancho_final, alto_final):
+    imagen = ImageOps.exif_transpose(imagen.convert("RGB"))
     w, h = imagen.size
     ratio_objetivo = ancho_final / alto_final
     ratio_actual = w / h
@@ -184,6 +192,7 @@ def recortar_vertical(imagen, ancho_final, alto_final):
 
 
 def recortar_cuadrado(imagen, tamano):
+    imagen = ImageOps.exif_transpose(imagen.convert("RGB"))
     w, h = imagen.size
     lado = min(w, h)
     x = (w - lado) // 2
@@ -195,6 +204,8 @@ def poner_logo(img, tamano=320, pos=(55, 55)):
     logo_path = "logo/frbl.png"
 
     if not os.path.exists(logo_path):
+        draw = ImageDraw.Draw(img)
+        draw.text(pos, "FRBL", font=cargar_fuente(78), fill=MORADO)
         return img
 
     logo = Image.open(logo_path).convert("RGBA")
@@ -207,7 +218,7 @@ def poner_logo(img, tamano=320, pos=(55, 55)):
 
 
 def fondo_foto(imagen):
-    img = recortar_vertical(imagen.convert("RGB"), ANCHO, ALTO)
+    img = recortar_vertical(imagen, ANCHO, ALTO)
 
     capa_oscura = Image.new("RGB", (ANCHO, ALTO), NEGRO)
     img = Image.blend(img, capa_oscura, 0.16)
@@ -244,6 +255,9 @@ def obtener_artistas():
 def elegir_foto(artista):
     carpeta = os.path.join("fotos", artista)
 
+    if not os.path.exists(carpeta):
+        raise Exception(f"No existe la carpeta fotos/{artista}")
+
     imagenes = [
         archivo for archivo in os.listdir(carpeta)
         if archivo.lower().endswith(EXTENSIONES)
@@ -277,7 +291,12 @@ Formato obligatorio:
 
 Reglas generales:
 - artista debe coincidir EXACTAMENTE con una carpeta disponible.
+- titulo debe ser el nombre visible del artista.
 - No inventes datos.
+- No inventes fechas.
+- No inventes colaboraciones.
+- No inventes nombres de canciones.
+- Usa solamente información presente en el texto.
 - caption nunca puede venir vacío.
 - hashtags nunca puede venir vacío.
 - hashtags debe tener entre 3 y 6 hashtags.
@@ -298,7 +317,6 @@ Cita exacta entregada:
 
 Reglas de entrevista:
 - categoria debe ser "ENTREVISTA".
-- titulo debe ser el artista principal.
 - Si hay cita exacta, gancho debe ser EXACTAMENTE esa cita, sin inventar ni parafrasear.
 - Si no hay cita exacta, gancho debe ser un resumen SIN comillas.
 - NO inventes citas.
@@ -309,26 +327,54 @@ Reglas de entrevista:
 Información:
 {texto}
 """
+
     elif plantilla == "Lanzamiento / Portada":
         prompt = f"""
 Eres editor musical de Freshbloc.
 
 La plantilla elegida es LANZAMIENTO.
-La imagen será portada o flyer.
+Debes convertir la información en un post de lanzamiento.
 
 {base}
 
-Reglas:
+REGLAS OBLIGATORIAS DE LANZAMIENTO:
 - categoria debe ser "LANZAMIENTO".
-- titulo debe ser el artista principal.
-- gancho debe vender el estreno.
-- subtitulo debe decir qué sale, cuándo o con quién en máximo 15 palabras.
-- No inventes nombre de canción si no fue entregado.
-- Prefiere: "YA ES OFICIAL", "ESTRENO CONFIRMADO", "NUEVA ERA", "SE VIENE EL DISCO".
+- NO inventes colaboraciones.
+- NO inventes fechas.
+- NO inventes nombres de canciones.
+- NO escribas "junte" si el texto no menciona colaboración.
+- NO escribas "colaboración" si el texto no menciona colaboración.
+- NO escribas "preparativos" si el texto no lo menciona.
+- Si el texto dice "disco", usa "disco".
+- Si el texto dice "álbum", usa "álbum".
+- Si el texto dice "tema", usa "tema".
+- Si falta fecha, NO inventes fecha.
+
+GANCHO:
+- máximo 5 palabras.
+- debe resumir exactamente el anuncio.
+- ejemplos válidos:
+  "ANUNCIA NUEVO DISCO"
+  "NUEVO ÁLBUM CONFIRMADO"
+  "ESTRENO EN CAMINO"
+  "LANZA NUEVO TEMA"
+
+SUBTITULO:
+- máximo 12 palabras.
+- debe explicar exactamente qué ocurrió.
+- Si no hay fecha, usa "El artista adelantó su próximo proyecto".
+- Si hay fecha, inclúyela.
+
+CAPTION:
+- entre 40 y 90 palabras.
+- explicar el lanzamiento con contexto real.
+- tono medio urbano chileno.
+- sin exageraciones falsas.
 
 Información:
 {texto}
 """
+
     elif plantilla == "Radar / Emergente":
         prompt = f"""
 Eres curador de Freshbloc Radar.
@@ -338,9 +384,8 @@ Sirve para recomendar artistas, canciones o nombres emergentes.
 
 {base}
 
-Reglas:
+Reglas de radar:
 - categoria debe ser "RADAR".
-- titulo debe ser el artista principal.
 - gancho debe sonar como descubrimiento.
 - subtitulo debe explicar por qué mirarlo en máximo 15 palabras.
 - Prefiere: "OJO CON ESTE NOMBRE", "PROMESA EN ASCENSO", "NUEVA CARA DEL BLOQUE".
@@ -349,6 +394,7 @@ Reglas:
 Información:
 {texto}
 """
+
     else:
         prompt = f"""
 Eres editor de Freshbloc, medio chileno de música urbana.
@@ -358,13 +404,13 @@ Debe parecer post noticioso de Instagram.
 
 {base}
 
-Reglas:
+Reglas de noticia:
 - categoria puede ser NOTICIA, LANZAMIENTO, TENDENCIA, EVENTO o RADAR.
-- titulo debe ser el artista principal.
 - gancho debe ser emocional, fuerte y noticioso.
 - subtitulo debe explicar el hecho concreto en máximo 15 palabras.
 - Si hay otro artista importante, úsalo en el subtitulo.
 - Prefiere: "PRENDIÓ LAS REDES", "YA ES OFICIAL", "JUNTE PESADO", "DESTAPÓ EL PLAN".
+- No uses "junte" si no hay colaboración.
 
 Información:
 {texto}
@@ -373,7 +419,7 @@ Información:
     respuesta = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.82,
+        temperature=0.35,
         response_format={"type": "json_object"}
     )
 
@@ -381,6 +427,25 @@ Información:
 
     if plantilla == "Quote / Entrevista" and cita_manual.strip():
         datos["gancho"] = cita_manual.strip()
+
+    if plantilla == "Lanzamiento / Portada":
+        raw = texto.lower()
+
+        if "colab" not in raw and "junte" not in raw and "junto" not in raw:
+            prohibidas = ["junte", "colaboración", "colaboracion", "colabora", "junto"]
+            for palabra in prohibidas:
+                if palabra in datos.get("subtitulo", "").lower():
+                    datos["subtitulo"] = "El artista adelantó su próximo proyecto"
+
+        if "disco" in raw and "disco" not in datos.get("gancho", "").lower():
+            datos["gancho"] = "ANUNCIA NUEVO DISCO"
+
+        if "álbum" in raw or "album" in raw:
+            if "álbum" not in datos.get("gancho", "").lower() and "album" not in datos.get("gancho", "").lower():
+                datos["gancho"] = "NUEVO ÁLBUM CONFIRMADO"
+
+        if "tema" in raw and "tema" not in datos.get("gancho", "").lower():
+            datos["gancho"] = "LANZA NUEVO TEMA"
 
     if not datos.get("caption"):
         datos["caption"] = f"{datos.get('titulo', 'El artista')} vuelve a mover la conversación dentro de la escena urbana."
@@ -425,36 +490,38 @@ def plantilla_noticia(datos, imagen):
 def plantilla_lanzamiento(datos, imagen):
     img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
 
-    fondo = recortar_vertical(imagen.convert("RGB"), ANCHO, ALTO)
-    fondo = fondo.filter(ImageFilter.GaussianBlur(45))
+    fondo = recortar_vertical(imagen, ANCHO, ALTO)
+    fondo = fondo.filter(ImageFilter.GaussianBlur(48))
     fondo = Image.blend(fondo, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.62)
     img.paste(fondo, (0, 0))
 
     draw = ImageDraw.Draw(img)
 
-    portada = recortar_cuadrado(imagen.convert("RGB"), 700)
-    img.paste(portada, (190, 170))
+    portada = recortar_cuadrado(imagen, 660)
+    img.paste(portada, (210, 135))
 
-    draw.rectangle((175, 155, 905, 885), outline=MORADO, width=10)
+    draw.rectangle((190, 115, 890, 815), outline=MORADO, width=10)
 
     img = poner_logo(img, tamano=260, pos=(55, 55))
     draw = ImageDraw.Draw(img)
 
-    fuente_tag = cargar_fuente(38)
-    fuente_artista = cargar_fuente(62)
-    fuente_gancho = cargar_fuente(92)
+    fuente_tag = cargar_fuente(42)
+    fuente_artista = cargar_fuente(66)
+    fuente_gancho = cargar_fuente(82)
     fuente_sub = cargar_fuente(42)
 
-    y = 940
+    y = 850
 
     draw.text(
         (55, y),
         "LANZAMIENTO",
         font=fuente_tag,
-        fill=MORADO
+        fill=MORADO,
+        stroke_width=1,
+        stroke_fill=NEGRO
     )
 
-    y += 60
+    y += 62
 
     draw.text(
         (55, y),
@@ -465,7 +532,7 @@ def plantilla_lanzamiento(datos, imagen):
         stroke_fill=NEGRO
     )
 
-    y += 78
+    y += 82
 
     for linea in dividir_texto(datos["gancho"].upper(), fuente_gancho, 950)[:2]:
         draw.text(
@@ -476,9 +543,9 @@ def plantilla_lanzamiento(datos, imagen):
             stroke_width=2,
             stroke_fill=NEGRO
         )
-        y += 95
+        y += 86
 
-    y += 15
+    y += 12
 
     for linea in dividir_texto(datos["subtitulo"], fuente_sub, 900)[:2]:
         draw.text(
@@ -502,7 +569,7 @@ def plantilla_quote(datos, imagen):
 
     draw.rectangle((0, 0, 470, ALTO), fill=MORADO_ENTREVISTA)
 
-    foto = recortar_vertical(imagen.convert("RGB"), 620, ALTO)
+    foto = recortar_vertical(imagen, 620, ALTO)
     foto = Image.blend(foto, Image.new("RGB", (620, ALTO), NEGRO), 0.25)
     img.paste(foto, (460, 0))
 
@@ -516,11 +583,10 @@ def plantilla_quote(datos, imagen):
     img = Image.alpha_composite(img.convert("RGBA"), sombra).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # Logo negro, sin cuadro
     draw.text((55, 65), "FRBL", font=cargar_fuente(78), fill=NEGRO_LOGO)
 
     fuente_tag = cargar_fuente(34)
-    fuente_quote = cargar_fuente(54)
+    fuente_quote = cargar_fuente(48)
     fuente_autor = cargar_fuente(42)
     fuente_sub = cargar_fuente(34)
 
@@ -528,9 +594,9 @@ def plantilla_quote(datos, imagen):
     draw.text((55, 340), "“", font=cargar_fuente(150), fill=BLANCO)
 
     y = 500
-    for linea in dividir_texto(datos["gancho"].upper(), fuente_quote, 390)[:6]:
+    for linea in dividir_texto(datos["gancho"].upper(), fuente_quote, 390)[:5]:
         draw.text((55, y), linea, font=fuente_quote, fill=BLANCO)
-        y += 62
+        y += 58
 
     draw.text((55, 950), f"— {datos['titulo'].upper()}", font=fuente_autor, fill=NEGRO)
 
@@ -550,7 +616,7 @@ def plantilla_radar(datos, imagen):
     draw.rectangle((0, 0, ANCHO, 420), fill=MORADO)
     draw.rectangle((0, 420, ANCHO, ALTO), fill=NEGRO)
 
-    foto = recortar_cuadrado(imagen.convert("RGB"), 650)
+    foto = recortar_cuadrado(imagen, 650)
     img.paste(foto, (215, 250))
 
     draw.rectangle((200, 235, 880, 915), outline=BLANCO, width=8)
@@ -629,7 +695,7 @@ plantilla = st.selectbox(
 
 noticia = st.text_area(
     "Pega la noticia",
-    placeholder="Ej: Jere Klein y Jairo Vera lanzan colaboración el 18 de junio...",
+    placeholder="Ej: Gino Mella anuncia nuevo disco para este año...",
     height=150
 )
 
@@ -659,9 +725,7 @@ if modo_imagen == "Subir imagen manual":
 generar = st.button("GENERAR POST")
 
 if generar:
-    if not GROQ_API_KEY or GROQ_API_KEY == "TU_KEY_AQUI":
-        st.error("Falta tu GROQ_API_KEY.")
-    elif not noticia.strip():
+    if not noticia.strip():
         st.error("Pega una noticia primero.")
     elif plantilla == "Quote / Entrevista" and not cita_manual.strip():
         st.error("Para entrevista, pega una cita exacta del artista.")
@@ -673,10 +737,10 @@ if generar:
                 if imagen_subida is None:
                     st.error("Sube una imagen manual primero.")
                     st.stop()
-                imagen = Image.open(imagen_subida)
+                imagen = abrir_imagen_segura(imagen_subida)
             else:
                 ruta = elegir_foto(datos["artista"])
-                imagen = Image.open(ruta)
+                imagen = abrir_imagen_segura(ruta)
 
             post = generar_post(plantilla, datos, imagen)
 
