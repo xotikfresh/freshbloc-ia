@@ -587,7 +587,7 @@ def plantilla_lanzamiento(datos, imagen):
     f_tag = cargar_fuente(48, "display")
     f_art = cargar_fuente(95, "display")
     f_gan = cargar_fuente(125, "display")
-    f_sub = cargar_fuente(52, "bold")
+    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 54)
 
     y = 770
 
@@ -615,11 +615,9 @@ def plantilla_lanzamiento(datos, imagen):
             (55, y),
             linea,
             font=f_sub,
-            fill=SUB_BLANCO,
-            stroke_width=1,
-            stroke_fill=NEGRO
+            fill=(255, 255, 255)
         )
-        y += 62
+        y += 58
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
@@ -674,14 +672,14 @@ def plantilla_radar(datos, imagen):
     d.rectangle((0, 0, ANCHO, 420), fill=MORADO)
     d.rectangle((0, 420, ANCHO, ALTO), fill=NEGRO)
 
+    # Logo FRBL limpio, mismo estilo editorial
+    d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
+    d.text((55, 150), "RADAR", font=cargar_fuente(90, "display"), fill=BLANCO)
+
     foto = recortar_cuadrado(imagen, 650)
     img.paste(foto, (215, 250))
     d.rectangle((200, 235, 880, 915), outline=BLANCO, width=8)
 
-    img = poner_logo(img, tamano=260, pos=(55, 55))
-    d = ImageDraw.Draw(img)
-
-    d.text((55, 150), "RADAR", font=cargar_fuente(90, "display"), fill=BLANCO)
     d.text((55, 925), datos["titulo"].upper(), font=cargar_fuente(86, "display"), fill=BLANCO)
 
     y = 1030
@@ -690,10 +688,10 @@ def plantilla_radar(datos, imagen):
         d.text((55, y), linea, font=f_gan, fill=MORADO)
         y += 70
 
-    f_sub = cargar_fuente(38, "bold")
+    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 42)
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:3]:
         d.text((55, y + 10), linea, font=f_sub, fill=BLANCO)
-        y += 45
+        y += 48
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
