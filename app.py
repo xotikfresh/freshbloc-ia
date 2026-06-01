@@ -554,15 +554,15 @@ def plantilla_noticia(datos, imagen):
     y += 5
 
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-    d.text(
-        (55, y),
-        linea,
-        font=f_sub,
-        fill=(255,255,255),
-        stroke_width=2,
-        stroke_fill=(0,0,0)
-        )
-        y += 65
+        d.text(
+            (55, y),
+            linea,
+            font=f_sub,
+            fill=(255,255,255),
+            stroke_width=2,
+            stroke_fill=(0,0,0)
+            )
+            y += 65
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
