@@ -492,15 +492,26 @@ def plantilla_lanzamiento(datos, imagen):
     y += 120
 
     for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
-        d.text((55, y), linea, font=f_gan, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
+        d.text(
+            (55, y),
+            linea,
+            font=f_gan,
+            fill=BLANCO,
+            stroke_width=2,
+            stroke_fill=NEGRO
+        )
         y += 135
 
     y += 20
 
-   for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-     d.text((55, y), linea, font=f_sub, fill=BLANCO)
-     y += 56
-
+    for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
+        d.text(
+            (55, y),
+            linea,
+            font=f_sub,
+            fill=BLANCO
+        )
+        y += 56
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
 
