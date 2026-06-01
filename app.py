@@ -314,7 +314,7 @@ Respuesta:
 }
 
 Información:
-{text}}
+{text}
 """
     elif plantilla == "Quote / Entrevista":
         prompt = f"""
