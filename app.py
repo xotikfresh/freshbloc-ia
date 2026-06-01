@@ -377,7 +377,7 @@ Información:
         datos["gancho"] = cita_manual.strip()
 
     if plantilla == "Lanzamiento / Portada":
-    raw = texto.lower()
+        raw = texto.lower()
 
     datos.setdefault("fecha", "")
     datos.setdefault("tema", "")
