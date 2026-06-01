@@ -558,9 +558,7 @@ def plantilla_noticia(datos, imagen):
             (55, y),
             linea,
             font=f_sub,
-            fill=(255,255,255),
-            stroke_width=2,
-            stroke_fill=(0,0,0)
+            fill=(255,255,255)
         )
         y += 65
 
@@ -591,10 +589,10 @@ def plantilla_lanzamiento(datos, imagen):
 
     y = 770
 
-    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO, stroke_width=1, stroke_fill=NEGRO)
+    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO, stroke_width=1, stroke_fill=(255,255,255))
     y += 78
 
-    d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
+    d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=(255,255,255))
     y += 120
 
     for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
@@ -604,7 +602,7 @@ def plantilla_lanzamiento(datos, imagen):
             font=f_gan,
             fill=BLANCO,
             stroke_width=2,
-            stroke_fill=NEGRO
+            stroke_fill=(255,255,255)
         )
         y += 135
 
@@ -653,15 +651,15 @@ def plantilla_quote(datos, imagen):
         d.text((55, y), linea, font=f_quote, fill=BLANCO)
         y += 58
 
-    d.text((55, 950), f"— {datos['titulo'].upper()}", font=cargar_fuente(42, "bold"), fill=NEGRO)
+    d.text((55, 950), f"— {datos['titulo'].upper()}", font=cargar_fuente(42, "bold"), fill=(255,255,255))
 
     y = 1020
     f_sub = cargar_fuente(34, "bold")
     for linea in dividir_texto(datos["subtitulo"], f_sub, 380)[:3]:
-        d.text((55, y), linea, font=f_sub, fill=NEGRO)
+        d.text((55, y), linea, font=f_sub, fill=(255,255,255))
         y += 42
 
-    d.rectangle((55, 1285, 420, 1292), fill=NEGRO)
+    d.rectangle((55, 1285, 420, 1292), fill=(255,255,255))
     return img
 
 
@@ -670,7 +668,7 @@ def plantilla_radar(datos, imagen):
     d = ImageDraw.Draw(img)
 
     d.rectangle((0, 0, ANCHO, 420), fill=MORADO)
-    d.rectangle((0, 420, ANCHO, ALTO), fill=NEGRO)
+    d.rectangle((0, 420, ANCHO, ALTO), fill=(255,255,255))
 
     # Logo FRBL limpio, mismo estilo editorial
     d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
