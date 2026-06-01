@@ -437,10 +437,25 @@ Plantilla: RADAR.
 
 Reglas:
 - categoria = "RADAR".
-- gancho debe sonar como descubrimiento.
-- subtitulo debe explicar por qué mirar al artista.
-- No inventes ciudad, edad ni números si no aparecen.
-- Evita frases genéricas.
+- gancho máximo 5 palabras.
+- subtitulo máximo 7 palabras.
+- No repitas el nombre del artista en gancho ni subtitulo.
+- No escribas frases largas.
+- Usa estilo corto de Instagram.
+- Evita explicar demasiado.
+
+Buenos ganchos:
+- EN LA MIRA
+- NUEVO SONIDO
+- ATENTO A ESTE NOMBRE
+- RADAR ACTIVADO
+- PROMETE EN LA ESCENA
+
+Buenos subtitulos:
+- Nuevo movimiento en la escena
+- Nombre para tener presente
+- Va tomando espacio propio
+- Su sonido empieza a moverse
 
 Información:
 {texto}
@@ -521,6 +536,19 @@ Información:
             if any(p in datos.get("subtitulo", "").lower() for p in ["junte", "colaboración", "colaboracion", "junto"]):
                 datos["subtitulo"] = "El estreno comienza a moverse entre sus seguidores"
 
+    if plantilla == "Radar / Emergente":
+        if len(datos.get("gancho", "").split()) > 5:
+            raw_radar = texto.lower()
+            if "colab" in raw_radar or "junto" in raw_radar or "junte" in raw_radar:
+                datos["gancho"] = "NUEVO JUNTE"
+            elif "tema" in raw_radar or "lanzamiento" in raw_radar or "estrena" in raw_radar:
+                datos["gancho"] = "NUEVO SONIDO"
+            else:
+                datos["gancho"] = "EN LA MIRA"
+
+        if len(datos.get("subtitulo", "").split()) > 7:
+            datos["subtitulo"] = "Nombre para tener presente"
+
     if not datos.get("caption"):
         datos["caption"] = f"{datos.get('titulo','El artista')} volvió a mover la conversación dentro de la escena urbana."
 
@@ -547,7 +575,7 @@ def plantilla_noticia(datos, imagen):
     d.text((55, 805), datos["titulo"].upper(), font=f_art, fill=BLANCO)
 
     y = 905
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
+    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
         d.text((55, y), linea, font=f_gan, fill=MORADO)
         y += 98
 
@@ -595,7 +623,7 @@ def plantilla_lanzamiento(datos, imagen):
     d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=(255,255,255))
     y += 120
 
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
+    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
         d.text(
             (55, y),
             linea,
@@ -697,10 +725,10 @@ def plantilla_radar(datos, imagen):
     d.text((55, 925), datos["titulo"].upper(), font=cargar_fuente(86, "display"), fill=(210,210,210))
 
     y = 1030
-    f_gan = cargar_fuente(62, "display")
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
+    f_gan = cargar_fuente(52, "display")
+    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
         d.text((55, y), linea, font=f_gan, fill=MORADO)
-        y += 70
+        y += 58
 
     f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 50)
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:3]:
