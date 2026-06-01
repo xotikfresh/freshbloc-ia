@@ -558,7 +558,7 @@ def plantilla_noticia(datos, imagen):
             (55, y),
             linea,
             font=f_sub,
-            fill=(255,255,255)
+            fill=(235,235,235)
         )
         y += 65
 
