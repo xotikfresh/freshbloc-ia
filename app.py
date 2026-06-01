@@ -48,24 +48,24 @@ h1,h2,h3,p,label,span {color:white!important;}
 </style>
 """, unsafe_allow_html=True)
 
-def cargar_fuente(tamano):
-    try:
-        import matplotlib.font_manager as fm
-        ruta = fm.findfont("DejaVu Sans", fallback_to_default=True)
-        return ImageFont.truetype(ruta, tamano)
-    except Exception:
-        pass
+def cargar_fuente(tamano, tipo="bold"):
+    if tipo == "display":
+        fuentes = [
+            "assets/Anton-Regular.ttf",
+            "assets/Montserrat-Bold.ttf",
+            "arialbd.ttf",
+        ]
+    else:
+        fuentes = [
+            "assets/Montserrat-Bold.ttf",
+            "assets/Anton-Regular.ttf",
+            "arialbd.ttf",
+        ]
 
-    rutas = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-        "arialbd.ttf",
-    ]
-
-    for ruta in rutas:
+    for fuente in fuentes:
         try:
-            return ImageFont.truetype(ruta, tamano)
-        except Exception:
+            return ImageFont.truetype(fuente, tamano)
+        except:
             pass
 
     return ImageFont.load_default()
@@ -334,9 +334,9 @@ def plantilla_lanzamiento(datos, imagen):
     img = poner_logo(img, tamano=260, pos=(55,55))
     d = ImageDraw.Draw(img)
 
-    f_tag = cargar_fuente(42)
-    f_art = cargar_fuente(68)
-    f_gan = cargar_fuente(88)
+    f_tag = cargar_fuente(42, "display")
+    f_art = cargar_fuente(82, "display")
+    f_gan = cargar_fuente(110, "display")
     f_sub = cargar_fuente(44)
 
     y = 800
@@ -378,12 +378,12 @@ def plantilla_quote(datos, imagen):
     img = Image.alpha_composite(img.convert("RGBA"), sombra).convert("RGB")
     d = ImageDraw.Draw(img)
 
-    d.text((55,65), "FRBL", font=cargar_fuente(78), fill=(0,0,0))
-    d.text((55,220), "ENTREVISTA", font=cargar_fuente(36), fill=BLANCO)
-    d.text((55,340), "“", font=cargar_fuente(150), fill=BLANCO)
+    d.text((55,65), "FRBL", font=cargar_fuente(78, "display"), fill=(0,0,0))
+    d.text((55,220), "ENTREVISTA", font=cargar_fuente(36, "display"), fill=BLANCO)
+    d.text((55,340), "“", font=cargar_fuente(150, "display"), fill=BLANCO)
 
     y = 500
-    f_quote = cargar_fuente(48)
+    f_quote = cargar_fuente(54, "display")
     for linea in dividir_texto(datos["gancho"].upper(), f_quote, 390)[:5]:
         d.text((55,y), linea, font=f_quote, fill=BLANCO)
         y += 58
