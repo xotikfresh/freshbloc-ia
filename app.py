@@ -665,15 +665,15 @@ def plantilla_quote(datos, imagen):
         y += tam_quote + 8
 
     # Abajo: blanco grueso, sin transparencia
-    f_autor = cargar_fuente(46, "display")
-    f_sub = cargar_fuente(38, "display")
+    f_autor = cargar_fuente(54, "display")
+    f_sub = cargar_fuente(44, "display")
 
     d.text((55, 930), f"— {datos['titulo'].upper()}", font=f_autor, fill=BLANCO)
 
     y = 1005
     for linea in dividir_texto(datos["subtitulo"], f_sub, 380)[:3]:
         d.text((55, y), linea, font=f_sub, fill=BLANCO)
-        y += 48
+        y += 58
 
     d.rectangle((55, 1285, 420, 1292), fill=BLANCO)
     return img
@@ -702,10 +702,10 @@ def plantilla_radar(datos, imagen):
         d.text((55, y), linea, font=f_gan, fill=MORADO)
         y += 70
 
-    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 42)
+    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 50)
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:3]:
         d.text((55, y + 10), linea, font=f_sub, fill=BLANCO)
-        y += 48
+        y += 56
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
