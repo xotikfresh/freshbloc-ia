@@ -49,33 +49,23 @@ h1,h2,h3,p,label,span {color:white!important;}
 """, unsafe_allow_html=True)
 
 def cargar_fuente(tamano):
-    posibles = [
-        "DejaVuSans-Bold.ttf",
-        "LiberationSans-Bold.ttf",
-        "Arial Bold.ttf",
-        "arialbd.ttf",
+    try:
+        import matplotlib.font_manager as fm
+        ruta = fm.findfont("DejaVu Sans", fallback_to_default=True)
+        return ImageFont.truetype(ruta, tamano)
+    except Exception:
+        pass
+
+    rutas = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "assets/Montserrat-Bold.ttf",
+        "arialbd.ttf",
     ]
 
-    for fuente in posibles:
+    for ruta in rutas:
         try:
-            return ImageFont.truetype(fuente, tamano)
-        except:
-            pass
-
-    # Buscar cualquier fuente bold instalada en la nube
-    import glob
-    rutas = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
-    bolds = [r for r in rutas if "Bold" in r or "bold" in r]
-
-    for fuente in bolds + rutas:
-        try:
-            return ImageFont.truetype(fuente, tamano)
-        except:
+            return ImageFont.truetype(ruta, tamano)
+        except Exception:
             pass
 
     return ImageFont.load_default()
