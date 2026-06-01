@@ -645,19 +645,34 @@ def plantilla_quote(datos, imagen):
     d.text((55, 220), "ENTREVISTA", font=cargar_fuente(36, "display"), fill=BLANCO)
     d.text((55, 340), "“", font=cargar_fuente(150, "display"), fill=BLANCO)
 
-    y = 500
-    f_quote = cargar_fuente(54, "display")
-    for linea in dividir_texto(datos["gancho"].upper(), f_quote, 390)[:5]:
+    cita = datos["gancho"].upper().strip()
+    largo = len(cita)
+
+    if largo <= 35:
+        tam_quote = 66
+        y = 465
+    elif largo <= 55:
+        tam_quote = 58
+        y = 470
+    else:
+        tam_quote = 50
+        y = 485
+
+    f_quote = cargar_fuente(tam_quote, "display")
+
+    for linea in dividir_texto(cita, f_quote, 390)[:6]:
         d.text((55, y), linea, font=f_quote, fill=BLANCO)
-        y += 58
+        y += tam_quote + 8
 
-    d.text((55, 950), f"— {datos['titulo'].upper()}", font=cargar_fuente(42, "bold"), fill=(255,255,255))
+    f_autor = ImageFont.truetype("assets/Montserrat-Bold.ttf", 42)
+    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 36)
 
-    y = 1020
-    f_sub = cargar_fuente(34, "bold")
+    d.text((55, 930), f"— {datos['titulo'].upper()}", font=f_autor, fill=(255,255,255))
+
+    y = 1000
     for linea in dividir_texto(datos["subtitulo"], f_sub, 380)[:3]:
         d.text((55, y), linea, font=f_sub, fill=(255,255,255))
-        y += 42
+        y += 44
 
     d.rectangle((55, 1285, 420, 1292), fill=(255,255,255))
     return img
