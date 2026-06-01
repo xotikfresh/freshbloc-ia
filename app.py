@@ -589,7 +589,7 @@ def plantilla_lanzamiento(datos, imagen):
 
     y = 770
 
-    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO, stroke_width=1, stroke_fill=(255,255,255))
+    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO)
     y += 78
 
     d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=(255,255,255))
@@ -668,7 +668,7 @@ def plantilla_radar(datos, imagen):
     d = ImageDraw.Draw(img)
 
     d.rectangle((0, 0, ANCHO, 420), fill=MORADO)
-    d.rectangle((0, 420, ANCHO, ALTO), fill=(255,255,255))
+    d.rectangle((0, 420, ANCHO, ALTO), fill=NEGRO)
 
     # Logo FRBL limpio, mismo estilo editorial
     d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
@@ -678,7 +678,7 @@ def plantilla_radar(datos, imagen):
     img.paste(foto, (215, 250))
     d.rectangle((200, 235, 880, 915), outline=BLANCO, width=8)
 
-    d.text((55, 925), datos["titulo"].upper(), font=cargar_fuente(86, "display"), fill=BLANCO)
+    d.text((55, 925), datos["titulo"].upper(), font=cargar_fuente(86, "display"), fill=(210,210,210))
 
     y = 1030
     f_gan = cargar_fuente(62, "display")
