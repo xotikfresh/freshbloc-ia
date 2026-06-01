@@ -334,30 +334,30 @@ def plantilla_lanzamiento(datos, imagen):
     img = poner_logo(img, tamano=260, pos=(55,55))
     d = ImageDraw.Draw(img)
 
-    f_tag = cargar_fuente(42, "display")
-    f_art = cargar_fuente(82, "display")
-    f_gan = cargar_fuente(110, "display")
-    f_sub = cargar_fuente(44)
+    f_tag = cargar_fuente(48, "display")
+    f_art = cargar_fuente(95, "display")
+    f_gan = cargar_fuente(125, "display")
+    f_sub = cargar_fuente(52)
 
-    y = 800
+    y = 770
 
-    d.text((55,y), "LANZAMIENTO", font=f_tag, fill=MORADO, stroke_width=1, stroke_fill=NEGRO)
-    y += 65
+    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO, stroke_width=1, stroke_fill=NEGRO)
+    y += 78
 
-    d.text((55,y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
-    y += 88
+    d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
+    y += 120
 
     for linea in dividir_texto(datos["gancho"].upper(), f_gan, 950)[:2]:
-        d.text((55,y), linea, font=f_gan, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
-        y += 92
+        d.text((55, y), linea, font=f_gan, fill=BLANCO, stroke_width=2, stroke_fill=NEGRO)
+        y += 135
 
-    y += 15
+    y += 20
 
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-        d.text((55,y), linea, font=f_sub, fill=GRIS, stroke_width=1, stroke_fill=NEGRO)
-        y += 50
+        d.text((55, y), linea, font=f_sub, fill=GRIS, stroke_width=1, stroke_fill=NEGRO)
+        y += 60
 
-    d.rectangle((55,1285,1025,1292), fill=MORADO)
+    d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
 
 def plantilla_quote(datos, imagen):
