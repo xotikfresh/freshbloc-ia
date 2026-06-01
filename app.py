@@ -6,7 +6,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Freshbloc IA", page_icon="FRBL", layout="centered")
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 client = Groq(api_key=GROQ_API_KEY)
 
 ANCHO, ALTO = 1080, 1350
@@ -426,38 +426,73 @@ def plantilla_lanzamiento(datos, imagen):
     img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
 
     fondo = recortar_vertical(imagen.convert("RGB"), ANCHO, ALTO)
-    fondo = fondo.filter(ImageFilter.GaussianBlur(50))
-    fondo = Image.blend(fondo, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.68)
+    fondo = fondo.filter(ImageFilter.GaussianBlur(45))
+    fondo = Image.blend(fondo, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.62)
     img.paste(fondo, (0, 0))
 
     draw = ImageDraw.Draw(img)
 
-    portada = recortar_cuadrado(imagen.convert("RGB"), 720)
-    img.paste(portada, (180, 205))
+    portada = recortar_cuadrado(imagen.convert("RGB"), 700)
+    img.paste(portada, (190, 170))
 
-    draw.rectangle((160, 185, 920, 945), outline=MORADO, width=10)
+    draw.rectangle((175, 155, 905, 885), outline=MORADO, width=10)
 
     img = poner_logo(img, tamano=260, pos=(55, 55))
     draw = ImageDraw.Draw(img)
 
-    fuente_tag = cargar_fuente(34)
-    fuente_titulo = cargar_fuente(56)
-    fuente_gancho = cargar_fuente(78)
-    fuente_sub = cargar_fuente(38)
+    fuente_tag = cargar_fuente(38)
+    fuente_artista = cargar_fuente(62)
+    fuente_gancho = cargar_fuente(92)
+    fuente_sub = cargar_fuente(42)
 
-    draw.text((55, 990), "LANZAMIENTO", font=fuente_tag, fill=MORADO)
-    draw.text((55, 1045), datos["titulo"].upper(), font=fuente_titulo, fill=BLANCO)
+    y = 940
 
-    y = 1115
+    draw.text(
+        (55, y),
+        "LANZAMIENTO",
+        font=fuente_tag,
+        fill=MORADO
+    )
+
+    y += 60
+
+    draw.text(
+        (55, y),
+        datos["titulo"].upper(),
+        font=fuente_artista,
+        fill=BLANCO,
+        stroke_width=2,
+        stroke_fill=NEGRO
+    )
+
+    y += 78
+
     for linea in dividir_texto(datos["gancho"].upper(), fuente_gancho, 950)[:2]:
-        draw.text((55, y), linea, font=fuente_gancho, fill=MORADO)
-        y += 78
+        draw.text(
+            (55, y),
+            linea,
+            font=fuente_gancho,
+            fill=BLANCO,
+            stroke_width=2,
+            stroke_fill=NEGRO
+        )
+        y += 95
+
+    y += 15
 
     for linea in dividir_texto(datos["subtitulo"], fuente_sub, 900)[:2]:
-        draw.text((55, y + 10), linea, font=fuente_sub, fill=BLANCO)
-        y += 45
+        draw.text(
+            (55, y),
+            linea,
+            font=fuente_sub,
+            fill=GRIS,
+            stroke_width=1,
+            stroke_fill=NEGRO
+        )
+        y += 48
 
     draw.rectangle((55, 1285, 1025, 1292), fill=MORADO)
+
     return img
 
 
