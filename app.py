@@ -538,7 +538,7 @@ def plantilla_noticia(datos, imagen):
     f_cat = cargar_fuente(36, "display")
     f_art = cargar_fuente(82, "display")
     f_gan = cargar_fuente(92, "display")
-    f_sub = cargar_fuente(42, "bold")
+    f_sub = cargar_fuente(58, "display")
 
     cat = datos["categoria"].upper()
     w = d.textbbox((0, 0), cat, font=f_cat)[2]
@@ -551,10 +551,18 @@ def plantilla_noticia(datos, imagen):
         d.text((55, y), linea, font=f_gan, fill=MORADO)
         y += 98
 
-    y += 20
+    y += 5
+
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-        d.text((55, y), linea, font=f_sub, fill=BLANCO)
-        y += 50
+    d.text(
+        (55, y),
+        linea,
+        font=f_sub,
+        fill=(255,255,255),
+        stroke_width=2,
+        stroke_fill=(0,0,0)
+        )
+        y += 65
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
