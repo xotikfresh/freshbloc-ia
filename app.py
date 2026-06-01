@@ -49,17 +49,37 @@ h1,h2,h3,p,label,span {color:white!important;}
 """, unsafe_allow_html=True)
 
 def cargar_fuente(tamano):
-    fuentes = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    posibles = [
+        "DejaVuSans-Bold.ttf",
+        "LiberationSans-Bold.ttf",
+        "Arial Bold.ttf",
         "arialbd.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "assets/Montserrat-Bold.ttf",
     ]
-    for f in fuentes:
+
+    for fuente in posibles:
         try:
-            return ImageFont.truetype(f, tamano)
+            return ImageFont.truetype(fuente, tamano)
         except:
             pass
+
+    # Buscar cualquier fuente bold instalada en la nube
+    import glob
+    rutas = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
+    bolds = [r for r in rutas if "Bold" in r or "bold" in r]
+
+    for fuente in bolds + rutas:
+        try:
+            return ImageFont.truetype(fuente, tamano)
+        except:
+            pass
+
     return ImageFont.load_default()
+
 
 def abrir_imagen_segura(origen, rotacion=0):
     img = Image.open(origen)
