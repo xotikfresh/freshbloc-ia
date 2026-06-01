@@ -166,13 +166,24 @@ Artistas disponibles:
 
 Devuelve SOLO JSON válido con:
 {{
- "categoria":"",
- "artista":"",
- "titulo":"",
- "gancho":"",
- "subtitulo":"",
- "caption":"",
- "hashtags":[]
+   "categoria":"",
+    "titulo":"",
+    "gancho":"",
+    "subtitulo":"",
+    "caption":"",
+    "hashtags":[],
+    "fecha":"",
+    "tema":"",
+    "album":"",
+    "ep":"",
+    "colaboracion":"",
+    "productor":""
+    "fecha":"",
+    "tema":"",
+    "album":"",
+    "ep":"",
+    "colaboracion":"",
+    "productor":""
 }}
 
 Reglas:
@@ -192,22 +203,118 @@ Eres editor musical de Freshbloc.
 
 Plantilla: LANZAMIENTO.
 
-Reglas estrictas:
-- categoria = LANZAMIENTO.
-- Si el texto dice disco, usa disco.
-- Si dice álbum, usa álbum.
-- Si dice tema, usa tema.
-- No uses "junte" ni "colaboración" si el texto no lo dice.
-- gancho máximo 5 palabras.
-- subtitulo máximo 12 palabras.
+REGLAS OBLIGATORIAS:
 
-Ejemplos:
-"Gino Mella anuncia nuevo disco" ->
-gancho: "ANUNCIA NUEVO DISCO"
-subtitulo: "El artista adelantó su próximo proyecto"
+- categoria = LANZAMIENTO.
+- NO inventes colaboraciones.
+- NO inventes canciones.
+- NO inventes fechas.
+- NO inventes discos.
+- Si el texto menciona una fecha, úsala.
+- Si menciona un EP, usa EP.
+- Si menciona un álbum, usa ÁLBUM.
+- Si menciona un sencillo, usa TEMA.
+- No uses frases genéricas.
+
+PROHIBIDO escribir:
+- "El artista presenta su nuevo proyecto"
+- "El artista adelanta su próximo proyecto"
+- "Nueva etapa para el artista"
+- "El artista sorprende"
+- "Se viene música nueva"
+
+GANCHO:
+- máximo 4 palabras.
+- debe ser impactante.
+- todo en mayúsculas.
+
+SUBTITULO:
+- máximo 14 palabras.
+- debe contener el dato concreto más importante.
+- no repetir el gancho.
+
+BUENOS EJEMPLOS:
+
+Texto:
+"AK420 estrena tema el 20 de junio"
+
+Gancho:
+"FECHA CONFIRMADA"
+
+Subtitulo:
+"El lanzamiento quedó fijado para el 20 de junio"
+
+Texto:
+"Jere Klein anuncia nuevo EP"
+
+Gancho:
+"NUEVO EP"
+
+Subtitulo:
+"El proyecto fue anunciado oficialmente esta semana"
+
+Texto:
+"King Savagge estrena colaboración con XXX"
+
+Gancho:
+"SE ACTIVA EL JUNTE"
+
+Subtitulo:
+"La colaboración fue confirmada por ambos artistas"
+
+ESTILO FRESHBLOC:
+
+Escribe como una página urbana de Instagram.
+
+Busca titulares que generen curiosidad.
+
+Prefiere:
+- PRENDE LAS REDES
+- FECHA CONFIRMADA
+- NUEVO EP
+- VUELVE CON MÚSICA
+- ROMPE EL SILENCIO
+- YA ES OFICIAL
+- SE ACTIVA EL ESTRENO
+- SORPRENDE A SUS FANS
+- PREPARA EL GOLPE
+- CALIENTA MOTORES
+
+Evita:
+- LANZA NUEVO TEMA
+- NUEVA CANCIÓN
+- PRESENTA SU PROYECTO
+- NUEVO PROYECTO
+- MÚSICA NUEVA
+
+EXTRACCIÓN DE DATOS:
+
+Identifica si existen:
+
+- fecha de lanzamiento
+- nombre del tema
+- nombre del álbum
+- nombre del EP
+- colaboración
+- productor
+
+Si un dato no existe, devuelve "".
+
+Ejemplo:
+
+Texto:
+"AK420 estrena No Me Llamen junto a Julianno Sosa el 20 de junio"
+
+Respuesta:
+
+{
+ "fecha":"20 de junio",
+ "tema":"No Me Llamen",
+ "colaboracion":"Julianno Sosa"
+}
 
 Información:
-{texto}
+{text}}
 """
     elif plantilla == "Quote / Entrevista":
         prompt = f"""
@@ -270,17 +377,54 @@ Información:
         datos["gancho"] = cita_manual.strip()
 
     if plantilla == "Lanzamiento / Portada":
-        raw = texto.lower()
-        if "colab" not in raw and "junte" not in raw and "junto" not in raw:
-            for p in ["junte", "colaboración", "colaboracion", "junto"]:
-                if p in datos.get("subtitulo","").lower():
-                    datos["subtitulo"] = "El artista adelantó su próximo proyecto"
-        if "disco" in raw:
-            datos["gancho"] = "ANUNCIA NUEVO DISCO"
-        elif "album" in raw or "álbum" in raw:
-            datos["gancho"] = "NUEVO ÁLBUM CONFIRMADO"
-        elif "tema" in raw:
-            datos["gancho"] = "LANZA NUEVO TEMA"
+    raw = texto.lower()
+
+    datos.setdefault("fecha", "")
+    datos.setdefault("tema", "")
+    datos.setdefault("album", "")
+    datos.setdefault("ep", "")
+    datos.setdefault("colaboracion", "")
+    datos.setdefault("productor", "")
+
+    if datos["fecha"] and datos["tema"]:
+        datos["gancho"] = "FECHA CONFIRMADA"
+        datos["subtitulo"] = f"{datos['tema']} llega el {datos['fecha']}"
+
+    elif datos["fecha"] and datos["colaboracion"]:
+        datos["gancho"] = "SE ACTIVA EL JUNTE"
+        datos["subtitulo"] = f"Junto a {datos['colaboracion']} este {datos['fecha']}"
+
+    elif datos["fecha"]:
+        datos["gancho"] = "FECHA CONFIRMADA"
+        datos["subtitulo"] = f"El estreno quedó fijado para el {datos['fecha']}"
+
+    elif datos["colaboracion"]:
+        datos["gancho"] = "SE ACTIVA EL JUNTE"
+        datos["subtitulo"] = f"Junto a {datos['colaboracion']}"
+
+    elif datos["album"]:
+        datos["gancho"] = "NUEVO ÁLBUM"
+        datos["subtitulo"] = f"{datos['album']} marca una nueva etapa"
+
+    elif datos["ep"]:
+        datos["gancho"] = "NUEVO EP"
+        datos["subtitulo"] = f"{datos['ep']} ya empieza a moverse"
+
+    elif "disco" in raw:
+        datos["gancho"] = "ANUNCIA NUEVO DISCO"
+        datos["subtitulo"] = "El anuncio encendió la expectativa en redes"
+
+    elif "album" in raw or "álbum" in raw:
+        datos["gancho"] = "NUEVO ÁLBUM"
+        datos["subtitulo"] = "El proyecto ya empieza a generar movimiento"
+
+    elif "tema" in raw:
+        datos["gancho"] = "VUELVE CON MÚSICA"
+        datos["subtitulo"] = "El estreno comienza a moverse entre sus seguidores"
+
+    if not any(x in raw for x in ["colab", "junte", "junto", "ft", "feat"]):
+        if any(p in datos.get("subtitulo", "").lower() for p in ["junte", "colaboración", "colaboracion", "junto"]):
+            datos["subtitulo"] = "El estreno comienza a moverse entre sus seguidores"
 
     if not datos.get("caption"):
         datos["caption"] = f"{datos.get('titulo','El artista')} volvió a mover la conversación dentro de la escena urbana."
@@ -337,7 +481,7 @@ def plantilla_lanzamiento(datos, imagen):
     f_tag = cargar_fuente(48, "display")
     f_art = cargar_fuente(95, "display")
     f_gan = cargar_fuente(125, "display")
-    f_sub = cargar_fuente(52)
+    f_sub = cargar_fuente(46, "bold")
 
     y = 770
 
@@ -353,9 +497,9 @@ def plantilla_lanzamiento(datos, imagen):
 
     y += 20
 
-    for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-        d.text((55, y), linea, font=f_sub, fill=GRIS, stroke_width=1, stroke_fill=NEGRO)
-        y += 60
+   for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
+     d.text((55, y), linea, font=f_sub, fill=BLANCO)
+     y += 56
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
