@@ -13,7 +13,7 @@ PROFILE_PATH = os.path.join(DATA_DIR, "perfil_negocio.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "historial.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-ANCHO, ALTO = 1080, 1350
+ANCHO, ALTO = 1080, 1080
 MORADO = (145, 60, 255)
 
 st.markdown("""
@@ -133,8 +133,11 @@ Reglas:
 - No inventes precios, fechas, stock, descuentos, eventos ni dirección.
 - Si el usuario da precio o fecha, úsalo.
 - Usa solo servicios y material disponible del perfil.
-- Gancho visual máximo 4 palabras.
-- Subtítulo visual máximo 12 palabras.
+- Gancho visual máximo 3 palabras, muy comercial y directo.
+- Subtítulo visual máximo 8 palabras.
+- El texto visual debe ser corto, legible y apto para una imagen de Instagram.
+- No escribas frases largas en el texto visual.
+- No uses el nombre del negocio como gancho visual.
 - Si la foto subida no sirve, dilo en idea_foto y sugiere una alternativa fácil.
 - No recomiendes antes/después, testimonios o clientes si el perfil no dice que tiene ese material.
 """
@@ -185,53 +188,79 @@ Reglas:
     )
     return json.loads(r.choices[0].message.content)
 
+
 def crear_imagen_base(perfil, data, foto=None):
     rubro = perfil.get("rubro", "").lower()
+
     if "barber" in rubro:
-        fondo, acento = (18,18,20), (205,168,90)
-    elif "comida" in rubro or "delivery" in rubro:
-        fondo, acento = (25,18,12), (245,140,35)
+        fondo, acento = (16, 16, 18), (210, 170, 90)
+    elif "cafeter" in rubro or "comida" in rubro or "delivery" in rubro or "restaurante" in rubro:
+        fondo, acento = (255, 248, 236), (170, 95, 35)
     elif "belleza" in rubro or "uñas" in rubro:
-        fondo, acento = (250,236,242), (150,80,120)
+        fondo, acento = (252, 240, 246), (150, 80, 120)
     else:
-        fondo, acento = (24,20,32), MORADO
+        fondo, acento = (248, 245, 255), MORADO
 
     img = Image.new("RGB", (ANCHO, ALTO), fondo)
     d = ImageDraw.Draw(img)
 
+    gancho = data.get("gancho_visual", "").upper().strip()
+    subtitulo = data.get("subtitulo_visual", "").strip()
+
+    # Fuerza textos más comerciales y cortos
+    if len(gancho) > 26:
+        gancho = "PROMO DEL DÍA"
+
+    f_gancho = fuente(86, True)
+    f_sub = fuente(42, True)
+    f_small = fuente(30, True)
+
     if foto:
         foto_base = Image.open(foto)
-        bg = recortar(foto_base, ANCHO, ALTO).filter(ImageFilter.GaussianBlur(32))
-        bg = Image.blend(bg, Image.new("RGB", (ANCHO, ALTO), fondo), 0.58)
-        img.paste(bg, (0, 0))
-        main = recortar(foto_base, 900, 720)
-        img.paste(main, (90, 120))
+
+        # Imagen principal grande, formato post real
+        main = recortar(foto_base, 1080, 720)
+        img.paste(main, (0, 0))
+
+        # Degradado inferior para legibilidad
         overlay = Image.new("RGBA", (ANCHO, ALTO), (0,0,0,0))
         od = ImageDraw.Draw(overlay)
-        od.rectangle((0, 760, ANCHO, ALTO), fill=(0,0,0,205))
+        for y in range(570, 1080):
+            alpha = int(235 * ((y - 570) / 510))
+            od.line((0, y, ANCHO, y), fill=(0,0,0,alpha))
         img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
         d = ImageDraw.Draw(img)
-        y = 835
-        texto = (250,250,250)
+
+        # Bloque de texto limpio
+        d.rounded_rectangle((58, 720, 1022, 1015), radius=34, fill=(0,0,0,120))
+        x, y = 82, 748
+        text_color = (255,255,255)
+        sub_color = (225,225,225)
+
     else:
-        d.rounded_rectangle((70,90,1010,1260), radius=42, outline=acento, width=8)
-        y = 470
-        texto = (250,250,250)
+        d.rounded_rectangle((55,55,1025,1025), radius=40, outline=acento, width=8)
+        x, y = 88, 380
+        text_color = (20,20,24)
+        sub_color = (70,70,75)
 
-    f1, f2, f3 = fuente(42), fuente(90), fuente(42, False)
-    d.text((80, 60), perfil.get("nombre", "NEGOCIO").upper()[:28], font=f1, fill=acento)
+    # Texto principal
+    for l in wrap(gancho, f_gancho, 900)[:2]:
+        d.text((x, y), l, font=f_gancho, fill=text_color)
+        y += 92
 
-    for l in wrap(data.get("gancho_visual","").upper(), f2, 900)[:3]:
-        d.text((80, y), l, font=f2, fill=texto)
-        y += 96
+    y += 8
 
-    for l in wrap(data.get("subtitulo_visual",""), f3, 900)[:2]:
-        d.text((80, y+8), l, font=f3, fill=(220,220,220))
-        y += 52
+    for l in wrap(subtitulo, f_sub, 860)[:2]:
+        d.text((x, y), l, font=f_sub, fill=sub_color)
+        y += 48
 
-    d.rounded_rectangle((80,1180,430,1250), radius=28, fill=acento)
-    d.text((112,1198), "PUBLICAR HOY", font=fuente(32), fill=fondo)
+    # Mini marca discreta abajo, no arriba
+    marca = perfil.get("nombre", "").upper()[:24]
+    if marca:
+        d.text((82, 1005), marca, font=f_small, fill=acento)
+
     return img
+
 
 perfil_default = {
     "nombre": "",
