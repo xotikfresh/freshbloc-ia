@@ -180,85 +180,214 @@ Reglas visuales:
     return datos
 
 
+
+def elegir_fuente_visual():
+    opciones_display = [
+        "assets/Montserrat-Bold.ttf",
+        "arialbd.ttf",
+        "assets/Anton-Regular.ttf"
+    ]
+    opciones_texto = [
+        "assets/Montserrat-Bold.ttf",
+        "arial.ttf",
+        "arialbd.ttf"
+    ]
+    return opciones_display, opciones_texto
+
+
+def font_random(tam, fuerte=True):
+    display, texto = elegir_fuente_visual()
+    opciones = display if fuerte else texto
+    random.shuffle(opciones)
+    for f in opciones:
+        try:
+            return ImageFont.truetype(f, tam)
+        except:
+            pass
+    return ImageFont.load_default()
+
+
+def color_contraste(rgb):
+    r, g, b = rgb
+    brillo = (r * 299 + g * 587 + b * 114) / 1000
+    return (10, 10, 12) if brillo > 150 else (245, 245, 245)
+
+
 def crear_post(datos, imagen=None):
     arte = datos.get("direccion_arte", {})
+
     fondo = hex_rgb(arte.get("color_fondo", "#111111"))
     principal = hex_rgb(arte.get("color_principal", "#FFFFFF"))
     secundario = hex_rgb(arte.get("color_secundario", "#CCCCCC"))
-    texto = hex_rgb(arte.get("color_texto", "#FFFFFF"))
+
+    # Paletas de respaldo para evitar look Freshbloc
+    paletas = [
+        ((16, 16, 16), (238, 232, 220), (185, 150, 90)),
+        ((245, 241, 232), (20, 20, 20), (120, 70, 40)),
+        ((22, 30, 40), (240, 240, 235), (180, 40, 40)),
+        ((235, 229, 218), (35, 35, 35), (90, 90, 90)),
+        ((12, 22, 18), (235, 230, 210), (190, 160, 85)),
+        ((250, 248, 242), (25, 25, 25), (160, 50, 40)),
+    ]
+
+    if principal == (255, 255, 255) and fondo == (17, 17, 17):
+        fondo, principal, secundario = random.choice(paletas)
 
     img = Image.new("RGB", (ANCHO, ALTO), fondo)
     d = ImageDraw.Draw(img)
 
-    layout = random.choice(["full", "magazine", "split", "poster"])
+    texto_color = color_contraste(fondo)
+    estilo = random.choice([
+        "hero_foto",
+        "editorial_limpio",
+        "catalogo",
+        "story_premium",
+        "poster_texto",
+        "split_creativo"
+    ])
 
     if imagen:
-        if layout == "full":
+        if estilo == "hero_foto":
             foto = recortar(imagen, ANCHO, ALTO)
-            foto = Image.blend(foto, Image.new("RGB", (ANCHO, ALTO), fondo), 0.28)
+            foto = Image.blend(foto, Image.new("RGB", (ANCHO, ALTO), fondo), random.uniform(0.18, 0.38))
             img.paste(foto, (0, 0))
+
             overlay = Image.new("RGBA", (ANCHO, ALTO), (0,0,0,0))
             od = ImageDraw.Draw(overlay)
+            inicio = random.randint(450, 700)
             for y in range(ALTO):
-                if y > 530:
-                    a = min(int(230 * ((y - 530) / (ALTO - 530))), 230)
+                if y > inicio:
+                    a = min(int(230 * ((y - inicio) / (ALTO - inicio))), 230)
                     od.line((0, y, ANCHO, y), fill=(0,0,0,a))
             img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
             d = ImageDraw.Draw(img)
-            text_y = 820
+            x = random.randint(55, 120)
+            y = random.randint(760, 900)
+            max_w = random.randint(760, 930)
+            texto_color = (250, 250, 250)
 
-        elif layout == "magazine":
-            foto = recortar(imagen, 820, 720)
-            img.paste(foto, (130, 110))
-            d.rectangle((80, 70, 1000, 880), outline=principal, width=8)
-            text_y = 920
+        elif estilo == "editorial_limpio":
+            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
+            foto_w = random.randint(700, 900)
+            foto_h = random.randint(620, 820)
+            foto = recortar(imagen, foto_w, foto_h)
+            fx = (ANCHO - foto_w) // 2
+            fy = random.randint(90, 180)
+            img.paste(foto, (fx, fy))
 
-        elif layout == "split":
-            foto = recortar(imagen, 520, ALTO)
-            img.paste(foto, (560, 0))
-            d.rectangle((0, 0, 540, ALTO), fill=fondo)
-            d.rectangle((55, 70, 500, 1280), outline=principal, width=6)
-            text_y = 520
+            if random.choice([True, False]):
+                d.rectangle((fx-18, fy-18, fx+foto_w+18, fy+foto_h+18), outline=principal, width=random.randint(4, 9))
+
+            x = random.randint(70, 130)
+            y = fy + foto_h + random.randint(55, 100)
+            max_w = 900
+
+        elif estilo == "catalogo":
+            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
+            d.rectangle((0, 0, ANCHO, random.randint(170, 280)), fill=principal)
+            foto = recortar(imagen, random.randint(560, 760), random.randint(620, 800))
+            fx = random.randint(250, 430)
+            fy = random.randint(220, 350)
+            img.paste(foto, (fx, fy))
+
+            x = random.randint(55, 100)
+            y = random.randint(850, 980)
+            max_w = 850
+            texto_color = color_contraste(fondo)
+
+        elif estilo == "story_premium":
+            d.rectangle((40, 40, ANCHO-40, ALTO-40), outline=principal, width=5)
+            foto = recortar(imagen, 860, 860)
+            mask = Image.new("L", (860, 860), 0)
+            md = ImageDraw.Draw(mask)
+            md.rounded_rectangle((0, 0, 860, 860), radius=random.randint(25, 70), fill=255)
+            fx, fy = 110, random.randint(90, 170)
+            img.paste(foto, (fx, fy), mask)
+
+            x = random.randint(75, 130)
+            y = random.randint(980, 1070)
+            max_w = 850
+
+        elif estilo == "poster_texto":
+            foto = recortar(imagen, ANCHO, ALTO)
+            foto = Image.blend(foto, Image.new("RGB", (ANCHO, ALTO), fondo), 0.55)
+            img.paste(foto, (0, 0))
+            d.rectangle((random.randint(40,80), random.randint(80,160), random.randint(880,1040), random.randint(310,430)), fill=principal)
+            x = random.randint(70, 130)
+            y = random.randint(720, 880)
+            max_w = 850
+            texto_color = (245, 245, 245)
 
         else:
-            foto = recortar(imagen, 740, 740)
-            img.paste(foto, (170, 170))
-            d.rectangle((0, 0, ANCHO, 95), fill=principal)
-            d.rectangle((0, 1255, ANCHO, ALTO), fill=principal)
-            text_y = 950
+            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
+            lado = random.choice(["izq", "der"])
+            foto_w = random.randint(480, 600)
+            foto = recortar(imagen, foto_w, ALTO)
+            fx = 0 if lado == "izq" else ANCHO - foto_w
+            img.paste(foto, (fx, 0))
+
+            if lado == "izq":
+                x = foto_w + random.randint(55, 95)
+                max_w = ANCHO - x - 55
+            else:
+                x = random.randint(55, 95)
+                max_w = ANCHO - foto_w - 90
+            y = random.randint(430, 620)
     else:
-        d.rectangle((70, 70, 1010, 1280), outline=principal, width=8)
-        d.ellipse((700, -200, 1250, 350), fill=secundario)
-        text_y = 500
+        # Sin foto: composición gráfica aleatoria
+        for _ in range(random.randint(3, 7)):
+            shape_color = random.choice([principal, secundario])
+            x1 = random.randint(-100, 900)
+            y1 = random.randint(-100, 1100)
+            x2 = x1 + random.randint(120, 420)
+            y2 = y1 + random.randint(120, 420)
+            if random.choice([True, False]):
+                d.ellipse((x1, y1, x2, y2), fill=shape_color)
+            else:
+                d.rectangle((x1, y1, x2, y2), fill=shape_color)
+        x = random.randint(70, 140)
+        y = random.randint(460, 720)
+        max_w = 850
 
-    f_marca = fuente(46, True)
-    f_gancho = fuente(118, True)
-    f_sub = fuente(48, False)
-    f_cta = fuente(38, False)
+    # Tipografías menos Freshbloc y con tamaños variables
+    f_marca = font_random(random.randint(34, 48), fuerte=False)
+    f_gancho = font_random(random.randint(70, 105), fuerte=True)
+    f_sub = font_random(random.randint(34, 46), fuerte=False)
+    f_cta = font_random(random.randint(28, 36), fuerte=False)
 
-    if layout == "split":
-        x = 90
-        max_w = 390
-    else:
-        x = 80
-        max_w = 900
-
-    d.text((x, 90 if layout != "magazine" else 920), datos.get("titulo","").upper(), font=f_marca, fill=principal)
-
-    y = text_y
-    for l in lineas(datos.get("gancho","").upper(), f_gancho, max_w)[:3]:
-        d.text((x, y), l, font=f_gancho, fill=texto)
-        y += 118
-
-    y += 10
-    for l in lineas(datos.get("subtitulo",""), f_sub, max_w)[:3]:
-        d.text((x, y), l, font=f_sub, fill=secundario)
-        y += 56
-
+    marca = datos.get("titulo", "").upper()
+    gancho = datos.get("gancho", "").upper()
+    subtitulo = datos.get("subtitulo", "")
     cta = datos.get("cta", "")
+
+    # Marca en posiciones variables, no logo fijo
+    marca_pos = random.choice([
+        (x, random.randint(60, 130)),
+        (random.randint(55, 140), random.randint(60, 150)),
+        (random.randint(600, 760), random.randint(70, 150))
+    ])
+    d.text(marca_pos, marca[:28], font=f_marca, fill=principal)
+
+    # Texto principal
+    y_actual = y
+    for l in lineas(gancho, f_gancho, max_w)[:3]:
+        d.text((x, y_actual), l, font=f_gancho, fill=texto_color)
+        y_actual += random.randint(78, 108)
+
+    y_actual += random.randint(8, 25)
+    for l in lineas(subtitulo, f_sub, max_w)[:3]:
+        d.text((x, y_actual), l, font=f_sub, fill=secundario)
+        y_actual += random.randint(42, 55)
+
     if cta:
-        d.rounded_rectangle((x, min(y + 30, 1210), x + 430, min(y + 105, 1285)), radius=30, fill=principal)
-        d.text((x + 32, min(y + 48, 1230)), cta.upper()[:28], font=f_cta, fill=fondo)
+        cta_y = min(y_actual + 35, 1220)
+        cta_w = min(520, max(300, len(cta) * 18))
+        d.rounded_rectangle(
+            (x, cta_y, x + cta_w, cta_y + 72),
+            radius=24,
+            fill=principal
+        )
+        d.text((x + 28, cta_y + 18), cta.upper()[:30], font=f_cta, fill=fondo)
 
     return img
 
