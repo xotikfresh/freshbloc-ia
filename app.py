@@ -1,484 +1,401 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 from groq import Groq
-import os, json, io, random
+import os, json, io
 from datetime import datetime
 
-st.set_page_config(page_title="Content IA", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="CM IA", page_icon="⚡", layout="wide")
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
+DATA_DIR = "data"
+PROFILE_PATH = os.path.join(DATA_DIR, "perfil_negocio.json")
+HISTORY_PATH = os.path.join(DATA_DIR, "historial.json")
+os.makedirs(DATA_DIR, exist_ok=True)
+
 ANCHO, ALTO = 1080, 1350
-BLANCO = (245, 245, 245)
-NEGRO = (10, 10, 12)
 
 st.markdown("""
 <style>
-.stApp {background:#08080A; color:white;}
-.block-container {max-width:1300px; padding:1.2rem;}
+.stApp {background:#08080A;color:white;}
+.block-container {max-width:1350px;padding:1.2rem;}
 h1,h2,h3,p,label,span {color:white!important;}
-.stTextArea textarea, .stTextInput input {
- background:#111!important; color:white!important; border:1px solid #555!important;
- font-size:18px!important; border-radius:14px!important;
+.stTextInput input,.stTextArea textarea {
+ background:#111!important;color:white!important;border:1px solid #444!important;
+ border-radius:14px!important;font-size:17px!important;
 }
 .stButton>button,.stDownloadButton>button {
- background:white; color:black; border-radius:16px; border:none;
- padding:1rem 1.5rem; font-weight:900; width:100%; font-size:18px;
+ background:#ffffff;color:#08080A;border:none;border-radius:14px;
+ font-weight:900;padding:0.9rem 1.2rem;width:100%;
 }
-.box {
- background:#111; border:1px solid #333; padding:16px; border-radius:14px;
- font-size:17px; line-height:1.45;
+.card {
+ background:#111;border:1px solid #2b2b2b;border-radius:18px;
+ padding:18px;margin-bottom:14px;
 }
+.good {border-color:#2f8f46;}
+.warn {border-color:#9c7a21;}
 </style>
 """, unsafe_allow_html=True)
 
 
-def fuente(tam, display=False):
+def load_json(path, default):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
+    return default
+
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def fuente(tam, bold=True):
     opciones = [
-        "assets/Anton-Regular.ttf" if display else "assets/Montserrat-Bold.ttf",
+        "assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf",
         "assets/Montserrat-Bold.ttf",
-        "assets/Anton-Regular.ttf",
-        "arialbd.ttf"
+        "arialbd.ttf",
+        "arial.ttf"
     ]
     for f in opciones:
         try:
             return ImageFont.truetype(f, tam)
-        except:
+        except Exception:
             pass
     return ImageFont.load_default()
 
 
-def abrir_img(origen, rotacion=0):
-    img = Image.open(origen)
+def recortar(img, w_final, h_final):
     img = ImageOps.exif_transpose(img).convert("RGB")
-    if rotacion == 90:
-        img = img.rotate(-90, expand=True)
-    elif rotacion == 180:
-        img = img.rotate(180, expand=True)
-    elif rotacion == 270:
-        img = img.rotate(90, expand=True)
-    return img
-
-
-def recortar(imagen, w_final, h_final):
-    imagen = imagen.convert("RGB")
-    w, h = imagen.size
+    w, h = img.size
     r_obj = w_final / h_final
     r = w / h
+
     if r > r_obj:
         nw = int(h * r_obj)
         x = (w - nw) // 2
-        imagen = imagen.crop((x, 0, x + nw, h))
+        img = img.crop((x, 0, x + nw, h))
     else:
         nh = int(w / r_obj)
         y = (h - nh) // 2
-        imagen = imagen.crop((0, y, w, y + nh))
-    return imagen.resize((w_final, h_final))
+        img = img.crop((0, y, w, y + nh))
+
+    return img.resize((w_final, h_final))
 
 
-def lineas(texto, f, max_w):
-    texto = str(texto or "").strip()
+def wrap(texto, font, max_w):
     d = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    palabras = texto.split()
-    out, actual = [], ""
+    palabras = str(texto or "").split()
+    lineas, actual = [], ""
+
     for p in palabras:
         prueba = actual + " " + p if actual else p
-        if d.textbbox((0, 0), prueba, font=f)[2] <= max_w:
+        if d.textbbox((0, 0), prueba, font=font)[2] <= max_w:
             actual = prueba
         else:
             if actual:
-                out.append(actual)
+                lineas.append(actual)
             actual = p
+
     if actual:
-        out.append(actual)
-    return out
+        lineas.append(actual)
+
+    return lineas
 
 
-def hex_rgb(h):
-    h = str(h).replace("#", "").strip()
-    if len(h) != 6:
-        return (255, 255, 255)
-    try:
-        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
-    except:
-        return (255, 255, 255)
-
-
-def analizar(nombre, rubro, tono, tipo, descripcion):
+def generar_con_ia(perfil, descripcion, tipo, historial):
     prompt = f"""
-Eres director creativo y community manager para negocios en Chile.
+Eres un community manager profesional para negocios pequeños de Chile.
 
-Crea una publicación personalizada. NO uses plantillas genéricas.
-Debes decidir el estilo visual según el negocio, rubro, tono y publicación.
+No eres diseñador de Canva. Eres un CM que decide qué comunicar, cuándo publicarlo y cómo decirlo.
 
 Devuelve SOLO JSON válido.
 
 Formato:
 {{
- "titulo":"",
- "gancho":"",
- "subtitulo":"",
- "caption":"",
- "historia":"",
- "whatsapp":"",
- "hashtags":[],
- "cta":"",
- "direccion_arte":{{
-   "estilo":"",
-   "color_fondo":"#000000",
-   "color_principal":"#FFFFFF",
-   "color_secundario":"#CCCCCC",
-   "color_texto":"#FFFFFF",
-   "layout":"",
-   "tratamiento_imagen":"",
-   "sensacion":""
- }}
+  "titulo_post":"",
+  "gancho_visual":"",
+  "subtitulo_visual":"",
+  "caption_instagram":"",
+  "historia_instagram":"",
+  "mensaje_whatsapp":"",
+  "hashtags":[],
+  "dia_recomendado":"",
+  "hora_recomendada":"",
+  "motivo_horario":"",
+  "recordatorio_whatsapp":"",
+  "idea_foto":"",
+  "tipo_contenido_siguiente":""
 }}
 
-Negocio: {nombre}
-Rubro: {rubro}
-Tono: {tono}
-Tipo de publicación: {tipo}
-Descripción: {descripcion}
+Perfil del negocio:
+{json.dumps(perfil, ensure_ascii=False)}
 
-Reglas de contenido:
-- No inventes precio, fecha, stock, dirección ni descuento.
-- Gancho máximo 4 palabras.
-- Subtítulo máximo 12 palabras.
-- Caption corto, humano y vendedor.
-- Hashtags con #.
-- No repitas mucho el nombre del negocio.
-- Evita “no te lo pierdas”.
-- Que suene a negocio real, no a IA.
+Tipo de publicación actual:
+{tipo}
 
-Reglas visuales:
-- NO uses morado por defecto.
-- NO uses Freshbloc.
-- NO uses FRBL.
-- Decide colores según el rubro.
-- Para barbería usa colores como negro, crema, blanco, gris, dorado, azul oscuro o rojo oscuro.
-- Para comida usa colores cálidos.
-- Para ropa usa colores editoriales.
-- Para belleza usa colores suaves o premium.
-- El layout debe ser distinto según el caso.
+El usuario quiere comunicar:
+{descripcion}
+
+Historial reciente:
+{json.dumps(historial[-8:], ensure_ascii=False)}
+
+Reglas:
+- No inventes precios, fechas, stock ni dirección.
+- Usa solo los datos entregados.
+- Si hay precio en el texto, úsalo.
+- Gancho visual máximo 4 palabras.
+- Subtítulo visual máximo 12 palabras.
+- Caption humano, vendedor y breve.
+- Historia Instagram muy corta.
+- WhatsApp directo, natural y útil.
+- Hashtags con #, máximo 8.
+- Recomienda día y hora según el perfil.
+- Crea un recordatorio tipo: "Hoy a las 18:00 sube..."
+- Evita repetir ideas del historial.
+- Habla como CM real, no como robot.
 """
+
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.55,
+        temperature=0.45,
         response_format={"type": "json_object"}
     )
-    datos = json.loads(r.choices[0].message.content)
 
-    if "hashtags" not in datos or not isinstance(datos["hashtags"], list):
-        datos["hashtags"] = ["#NegocioLocal", "#Chile", "#Emprendimiento"]
+    data = json.loads(r.choices[0].message.content)
 
-    for i, h in enumerate(datos["hashtags"]):
-        h = str(h).replace(" ", "")
-        datos["hashtags"][i] = h if h.startswith("#") else "#" + h
+    if not isinstance(data.get("hashtags"), list):
+        data["hashtags"] = ["#NegocioLocal", "#Chile"]
 
-    return datos
-
-
-
-def elegir_fuente_visual():
-    opciones_display = [
-        "assets/Montserrat-Bold.ttf",
-        "arialbd.ttf",
-        "assets/Anton-Regular.ttf"
-    ]
-    opciones_texto = [
-        "assets/Montserrat-Bold.ttf",
-        "arial.ttf",
-        "arialbd.ttf"
-    ]
-    return opciones_display, opciones_texto
-
-
-def font_random(tam, fuerte=True):
-    display, texto = elegir_fuente_visual()
-    opciones = display if fuerte else texto
-    random.shuffle(opciones)
-    for f in opciones:
-        try:
-            return ImageFont.truetype(f, tam)
-        except:
-            pass
-    return ImageFont.load_default()
-
-
-def color_contraste(rgb):
-    r, g, b = rgb
-    brillo = (r * 299 + g * 587 + b * 114) / 1000
-    return (10, 10, 12) if brillo > 150 else (245, 245, 245)
-
-
-def crear_post(datos, imagen=None):
-    arte = datos.get("direccion_arte", {})
-
-    fondo = hex_rgb(arte.get("color_fondo", "#111111"))
-    principal = hex_rgb(arte.get("color_principal", "#FFFFFF"))
-    secundario = hex_rgb(arte.get("color_secundario", "#CCCCCC"))
-
-    # Paletas de respaldo para evitar look Freshbloc
-    paletas = [
-        ((16, 16, 16), (238, 232, 220), (185, 150, 90)),
-        ((245, 241, 232), (20, 20, 20), (120, 70, 40)),
-        ((22, 30, 40), (240, 240, 235), (180, 40, 40)),
-        ((235, 229, 218), (35, 35, 35), (90, 90, 90)),
-        ((12, 22, 18), (235, 230, 210), (190, 160, 85)),
-        ((250, 248, 242), (25, 25, 25), (160, 50, 40)),
+    data["hashtags"] = [
+        h if str(h).startswith("#") else "#" + str(h).replace(" ", "")
+        for h in data["hashtags"]
     ]
 
-    if principal == (255, 255, 255) and fondo == (17, 17, 17):
-        fondo, principal, secundario = random.choice(paletas)
+    return data
+
+
+def crear_imagen_simple(perfil, data, foto=None):
+    rubro = perfil.get("rubro", "").lower()
+
+    if "comida" in rubro or "delivery" in rubro or "restaurante" in rubro:
+        fondo = (18, 12, 8)
+        acento = (245, 155, 30)
+    elif "barber" in rubro:
+        fondo = (12, 12, 12)
+        acento = (210, 170, 90)
+    elif "belleza" in rubro or "uñas" in rubro:
+        fondo = (245, 235, 238)
+        acento = (150, 90, 120)
+    elif "ropa" in rubro:
+        fondo = (235, 235, 230)
+        acento = (20, 20, 20)
+    else:
+        fondo = (14, 14, 16)
+        acento = (240, 240, 240)
+
+    texto = (245, 245, 245) if sum(fondo) < 380 else (15, 15, 15)
 
     img = Image.new("RGB", (ANCHO, ALTO), fondo)
     d = ImageDraw.Draw(img)
 
-    texto_color = color_contraste(fondo)
-    estilo = random.choice([
-        "hero_foto",
-        "editorial_limpio",
-        "catalogo",
-        "story_premium",
-        "poster_texto",
-        "split_creativo"
-    ])
+    if foto:
+        foto_base = Image.open(foto)
+        bg = recortar(foto_base, ANCHO, ALTO).filter(ImageFilter.GaussianBlur(28))
+        bg = Image.blend(bg, Image.new("RGB", (ANCHO, ALTO), fondo), 0.55)
+        img.paste(bg, (0, 0))
 
-    if imagen:
-        if estilo == "hero_foto":
-            foto = recortar(imagen, ANCHO, ALTO)
-            foto = Image.blend(foto, Image.new("RGB", (ANCHO, ALTO), fondo), random.uniform(0.18, 0.38))
-            img.paste(foto, (0, 0))
+        principal = recortar(foto_base, 860, 720)
+        img.paste(principal, (110, 120))
 
-            overlay = Image.new("RGBA", (ANCHO, ALTO), (0,0,0,0))
-            od = ImageDraw.Draw(overlay)
-            inicio = random.randint(450, 700)
-            for y in range(ALTO):
-                if y > inicio:
-                    a = min(int(230 * ((y - inicio) / (ALTO - inicio))), 230)
-                    od.line((0, y, ANCHO, y), fill=(0,0,0,a))
-            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-            d = ImageDraw.Draw(img)
-            x = random.randint(55, 120)
-            y = random.randint(760, 900)
-            max_w = random.randint(760, 930)
-            texto_color = (250, 250, 250)
-
-        elif estilo == "editorial_limpio":
-            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
-            foto_w = random.randint(700, 900)
-            foto_h = random.randint(620, 820)
-            foto = recortar(imagen, foto_w, foto_h)
-            fx = (ANCHO - foto_w) // 2
-            fy = random.randint(90, 180)
-            img.paste(foto, (fx, fy))
-
-            if random.choice([True, False]):
-                d.rectangle((fx-18, fy-18, fx+foto_w+18, fy+foto_h+18), outline=principal, width=random.randint(4, 9))
-
-            x = random.randint(70, 130)
-            y = fy + foto_h + random.randint(55, 100)
-            max_w = 900
-
-        elif estilo == "catalogo":
-            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
-            d.rectangle((0, 0, ANCHO, random.randint(170, 280)), fill=principal)
-            foto = recortar(imagen, random.randint(560, 760), random.randint(620, 800))
-            fx = random.randint(250, 430)
-            fy = random.randint(220, 350)
-            img.paste(foto, (fx, fy))
-
-            x = random.randint(55, 100)
-            y = random.randint(850, 980)
-            max_w = 850
-            texto_color = color_contraste(fondo)
-
-        elif estilo == "story_premium":
-            d.rectangle((40, 40, ANCHO-40, ALTO-40), outline=principal, width=5)
-            foto = recortar(imagen, 860, 860)
-            mask = Image.new("L", (860, 860), 0)
-            md = ImageDraw.Draw(mask)
-            md.rounded_rectangle((0, 0, 860, 860), radius=random.randint(25, 70), fill=255)
-            fx, fy = 110, random.randint(90, 170)
-            img.paste(foto, (fx, fy), mask)
-
-            x = random.randint(75, 130)
-            y = random.randint(980, 1070)
-            max_w = 850
-
-        elif estilo == "poster_texto":
-            foto = recortar(imagen, ANCHO, ALTO)
-            foto = Image.blend(foto, Image.new("RGB", (ANCHO, ALTO), fondo), 0.55)
-            img.paste(foto, (0, 0))
-            d.rectangle((random.randint(40,80), random.randint(80,160), random.randint(880,1040), random.randint(310,430)), fill=principal)
-            x = random.randint(70, 130)
-            y = random.randint(720, 880)
-            max_w = 850
-            texto_color = (245, 245, 245)
-
-        else:
-            d.rectangle((0, 0, ANCHO, ALTO), fill=fondo)
-            lado = random.choice(["izq", "der"])
-            foto_w = random.randint(480, 600)
-            foto = recortar(imagen, foto_w, ALTO)
-            fx = 0 if lado == "izq" else ANCHO - foto_w
-            img.paste(foto, (fx, 0))
-
-            if lado == "izq":
-                x = foto_w + random.randint(55, 95)
-                max_w = ANCHO - x - 55
-            else:
-                x = random.randint(55, 95)
-                max_w = ANCHO - foto_w - 90
-            y = random.randint(430, 620)
+        overlay = Image.new("RGBA", (ANCHO, ALTO), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+        od.rectangle((0, 760, ANCHO, ALTO), fill=(0, 0, 0, 190))
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        d = ImageDraw.Draw(img)
+        texto = (245, 245, 245)
+        y = 825
     else:
-        # Sin foto: composición gráfica aleatoria
-        for _ in range(random.randint(3, 7)):
-            shape_color = random.choice([principal, secundario])
-            x1 = random.randint(-100, 900)
-            y1 = random.randint(-100, 1100)
-            x2 = x1 + random.randint(120, 420)
-            y2 = y1 + random.randint(120, 420)
-            if random.choice([True, False]):
-                d.ellipse((x1, y1, x2, y2), fill=shape_color)
-            else:
-                d.rectangle((x1, y1, x2, y2), fill=shape_color)
-        x = random.randint(70, 140)
-        y = random.randint(460, 720)
-        max_w = 850
+        d.rectangle((70, 90, 1010, 1260), outline=acento, width=8)
+        d.ellipse((720, -160, 1240, 360), fill=acento)
+        y = 470
 
-    # Tipografías menos Freshbloc y con tamaños variables
-    f_marca = font_random(random.randint(34, 48), fuerte=False)
-    f_gancho = font_random(random.randint(70, 105), fuerte=True)
-    f_sub = font_random(random.randint(34, 46), fuerte=False)
-    f_cta = font_random(random.randint(28, 36), fuerte=False)
+    f_negocio = fuente(44)
+    f_gancho = fuente(96)
+    f_sub = fuente(44, False)
+    f_cta = fuente(34)
 
-    marca = datos.get("titulo", "").upper()
-    gancho = datos.get("gancho", "").upper()
-    subtitulo = datos.get("subtitulo", "")
-    cta = datos.get("cta", "")
+    negocio = perfil.get("nombre", "NEGOCIO").upper()
+    gancho = data.get("gancho_visual", "").upper()
+    subtitulo = data.get("subtitulo_visual", "")
+    cta = "PUBLICAR HOY"
 
-    # Marca en posiciones variables, no logo fijo
-    marca_pos = random.choice([
-        (x, random.randint(60, 130)),
-        (random.randint(55, 140), random.randint(60, 150)),
-        (random.randint(600, 760), random.randint(70, 150))
-    ])
-    d.text(marca_pos, marca[:28], font=f_marca, fill=principal)
+    d.text((80, 60), negocio[:28], font=f_negocio, fill=acento)
 
-    # Texto principal
-    y_actual = y
-    for l in lineas(gancho, f_gancho, max_w)[:3]:
-        d.text((x, y_actual), l, font=f_gancho, fill=texto_color)
-        y_actual += random.randint(78, 108)
+    for linea in wrap(gancho, f_gancho, 900)[:3]:
+        d.text((80, y), linea, font=f_gancho, fill=texto)
+        y += 100
 
-    y_actual += random.randint(8, 25)
-    for l in lineas(subtitulo, f_sub, max_w)[:3]:
-        d.text((x, y_actual), l, font=f_sub, fill=secundario)
-        y_actual += random.randint(42, 55)
+    y += 10
+    for linea in wrap(subtitulo, f_sub, 900)[:3]:
+        d.text((80, y), linea, font=f_sub, fill=(220, 220, 220) if sum(texto) > 400 else (55, 55, 55))
+        y += 54
 
-    if cta:
-        cta_y = min(y_actual + 35, 1220)
-        cta_w = min(520, max(300, len(cta) * 18))
-        d.rounded_rectangle(
-            (x, cta_y, x + cta_w, cta_y + 72),
-            radius=24,
-            fill=principal
-        )
-        d.text((x + 28, cta_y + 18), cta.upper()[:30], font=f_cta, fill=fondo)
+    d.rounded_rectangle((80, 1180, 430, 1250), radius=28, fill=acento)
+    d.text((112, 1198), cta, font=f_cta, fill=fondo)
 
     return img
 
 
-if "post_buffer" not in st.session_state:
-    st.session_state.post_buffer = None
-if "datos" not in st.session_state:
-    st.session_state.datos = None
+perfil_default = {
+    "nombre": "",
+    "rubro": "Barbería",
+    "tono": "Cercano",
+    "publico": "",
+    "productos": "",
+    "dias_publicacion": "Lunes, miércoles y viernes",
+    "horario_preferido": "19:00",
+    "whatsapp": ""
+}
 
-st.markdown("<h1 style='text-align:center;'>Content IA para negocios</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>Crea publicaciones personalizadas sin plantillas fijas.</p>", unsafe_allow_html=True)
+perfil = load_json(PROFILE_PATH, perfil_default)
+historial = load_json(HISTORY_PATH, [])
 
-izq, der = st.columns([0.9, 1.1], gap="large")
+st.markdown("<h1>CM IA para negocios</h1>", unsafe_allow_html=True)
+st.write("La app que te dice qué publicar, cuándo publicarlo y te deja el contenido listo.")
 
-with izq:
-    st.markdown("## Perfil del negocio")
+tab1, tab2, tab3 = st.tabs(["Crear publicación", "Perfil del negocio", "Calendario / historial"])
 
-    nombre = st.text_input("Nombre del negocio", placeholder="Ej: Barbería El Corte")
-    rubro = st.selectbox("Rubro", [
-        "Barbería", "Restaurante", "Cafetería", "Tienda de ropa",
-        "Gimnasio", "Belleza / uñas", "Minimarket", "Delivery", "Otro"
-    ])
-    tono = st.selectbox("Tono de marca", [
-        "Cercano", "Juvenil", "Profesional", "Premium", "Divertido", "Urgente / venta rápida"
-    ])
-    tipo = st.selectbox("Tipo de publicación", [
-        "Promoción", "Producto", "Evento", "Testimonio", "Informativo", "Sorteo"
-    ])
-    descripcion = st.text_area(
-        "Describe qué quieres publicar",
-        height=150,
-        placeholder="Ej: Inauguración de barbería en el centro. Queremos invitar gente este viernes."
-    )
-    rotacion = st.selectbox("Rotación de imagen", [0, 90, 180, 270], index=0)
-    imagen_subida = st.file_uploader("Sube imagen del producto, local o referencia", type=["jpg", "jpeg", "png", "webp"])
+with tab2:
+    st.markdown("## Perfil único del negocio")
 
-    generar = st.button("GENERAR CONTENIDO")
-
-with der:
-    st.markdown("## Vista previa")
-
-    if generar:
-        if not nombre.strip():
-            st.error("Escribe el nombre del negocio.")
-        elif not descripcion.strip():
-            st.error("Describe qué quieres publicar.")
-        else:
-            with st.spinner("Generando diseño personalizado..."):
-                datos = analizar(nombre, rubro, tono, tipo, descripcion)
-                imagen = abrir_img(imagen_subida, rotacion) if imagen_subida else None
-
-                post = crear_post(datos, imagen)
-
-                buffer = io.BytesIO()
-                post.save(buffer, format="PNG")
-                buffer.seek(0)
-
-                st.session_state.post_buffer = buffer.getvalue()
-                st.session_state.datos = datos
-
-    if st.session_state.post_buffer:
-        st.image(st.session_state.post_buffer, caption="Post generado", use_container_width=True)
-        st.download_button(
-            "DESCARGAR POST",
-            data=st.session_state.post_buffer,
-            file_name=f"post_negocio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-            mime="image/png"
-        )
-    else:
-        st.info("Completa los datos y genera tu primer post.")
-
-if st.session_state.datos:
-    datos = st.session_state.datos
-
-    st.markdown("---")
     c1, c2 = st.columns(2)
 
     with c1:
-        st.markdown("### Caption Instagram")
-        st.markdown(f"<div class='box'>{datos.get('caption','')}</div>", unsafe_allow_html=True)
-
-        st.markdown("### Historia Instagram")
-        st.markdown(f"<div class='box'>{datos.get('historia','')}</div>", unsafe_allow_html=True)
+        perfil["nombre"] = st.text_input("Nombre del negocio", value=perfil.get("nombre", ""))
+        perfil["rubro"] = st.selectbox(
+            "Rubro",
+            ["Barbería", "Restaurante / comida", "Delivery", "Cafetería", "Tienda de ropa", "Gimnasio", "Belleza / uñas", "Minimarket", "Otro"],
+            index=["Barbería", "Restaurante / comida", "Delivery", "Cafetería", "Tienda de ropa", "Gimnasio", "Belleza / uñas", "Minimarket", "Otro"].index(perfil.get("rubro", "Barbería")) if perfil.get("rubro", "Barbería") in ["Barbería", "Restaurante / comida", "Delivery", "Cafetería", "Tienda de ropa", "Gimnasio", "Belleza / uñas", "Minimarket", "Otro"] else 0
+        )
+        perfil["tono"] = st.selectbox(
+            "Tono de marca",
+            ["Cercano", "Juvenil", "Profesional", "Premium", "Divertido", "Urgente / venta rápida"],
+            index=["Cercano", "Juvenil", "Profesional", "Premium", "Divertido", "Urgente / venta rápida"].index(perfil.get("tono", "Cercano")) if perfil.get("tono", "Cercano") in ["Cercano", "Juvenil", "Profesional", "Premium", "Divertido", "Urgente / venta rápida"] else 0
+        )
 
     with c2:
-        st.markdown("### Mensaje WhatsApp")
-        st.markdown(f"<div class='box'>{datos.get('whatsapp','')}</div>", unsafe_allow_html=True)
+        perfil["publico"] = st.text_input("Público objetivo", value=perfil.get("publico", ""), placeholder="Ej: hombres 18-35 de Viña")
+        perfil["productos"] = st.text_area("Qué vende / servicios principales", value=perfil.get("productos", ""), height=100)
+        perfil["dias_publicacion"] = st.text_input("Días ideales para publicar", value=perfil.get("dias_publicacion", "Lunes, miércoles y viernes"))
+        perfil["horario_preferido"] = st.text_input("Horario preferido", value=perfil.get("horario_preferido", "19:00"))
+        perfil["whatsapp"] = st.text_input("WhatsApp del negocio opcional", value=perfil.get("whatsapp", ""))
 
-        st.markdown("### Hashtags")
-        st.markdown(f"<div class='box'>{' '.join(datos.get('hashtags', []))}</div>", unsafe_allow_html=True)
+    if st.button("GUARDAR PERFIL"):
+        save_json(PROFILE_PATH, perfil)
+        st.success("Perfil guardado. Ahora la IA usará esta información siempre.")
 
-        arte = datos.get("direccion_arte", {})
-        st.markdown("### Dirección visual IA")
-        st.markdown(f"<div class='box'>{arte.get('estilo','')}<br>{arte.get('sensacion','')}<br>{arte.get('tratamiento_imagen','')}</div>", unsafe_allow_html=True)
+with tab1:
+    izq, der = st.columns([0.9, 1.1], gap="large")
+
+    with izq:
+        st.markdown("## Crear publicación")
+
+        st.markdown(f"""
+        <div class="card good">
+        <b>Negocio:</b> {perfil.get("nombre") or "Sin nombre"}<br>
+        <b>Rubro:</b> {perfil.get("rubro")}<br>
+        <b>Tono:</b> {perfil.get("tono")}<br>
+        <b>Días:</b> {perfil.get("dias_publicacion")} · {perfil.get("horario_preferido")}
+        </div>
+        """, unsafe_allow_html=True)
+
+        tipo = st.selectbox("Tipo de publicación", ["Promoción", "Producto", "Evento", "Testimonio", "Informativo", "Recordatorio", "Sorteo"])
+        descripcion = st.text_area("Qué quieres comunicar", height=150, placeholder="Ej: Para las primeras 40 personas, completos a $1500 por delivery.")
+        foto = st.file_uploader("Sube foto del producto/local/persona", type=["jpg", "jpeg", "png", "webp"])
+        generar = st.button("GENERAR POST + CALENDARIO")
+
+    with der:
+        st.markdown("## Resultado")
+
+        if generar:
+            if not perfil.get("nombre"):
+                st.error("Primero guarda el perfil del negocio.")
+            elif not descripcion.strip():
+                st.error("Escribe qué quieres comunicar.")
+            else:
+                with st.spinner("El CM IA está pensando la publicación..."):
+                    data = generar_con_ia(perfil, descripcion, tipo, historial)
+                    post = crear_imagen_simple(perfil, data, foto)
+
+                    buffer = io.BytesIO()
+                    post.save(buffer, format="PNG")
+                    buffer.seek(0)
+
+                    st.session_state["post_buffer"] = buffer.getvalue()
+                    st.session_state["data"] = data
+
+                    historial.append({
+                        "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "tipo": tipo,
+                        "descripcion": descripcion,
+                        "dia_recomendado": data.get("dia_recomendado", ""),
+                        "hora_recomendada": data.get("hora_recomendada", ""),
+                        "gancho": data.get("gancho_visual", "")
+                    })
+                    save_json(HISTORY_PATH, historial)
+
+        if "post_buffer" in st.session_state:
+            st.image(st.session_state["post_buffer"], use_container_width=True)
+            st.download_button(
+                "DESCARGAR IMAGEN",
+                data=st.session_state["post_buffer"],
+                file_name=f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                mime="image/png"
+            )
+
+        if "data" in st.session_state:
+            data = st.session_state["data"]
+
+            st.markdown("### Caption Instagram")
+            st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
+
+            st.markdown("### Historia Instagram")
+            st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
+
+            st.markdown("### Mensaje WhatsApp")
+            st.markdown(f"<div class='card'>{data.get('mensaje_whatsapp','')}</div>", unsafe_allow_html=True)
+
+            st.markdown("### Hashtags")
+            st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
+
+            st.markdown("### Cuándo publicar")
+            st.markdown(f"""
+            <div class='card warn'>
+            <b>{data.get('dia_recomendado','')}</b> a las <b>{data.get('hora_recomendada','')}</b><br>
+            {data.get('motivo_horario','')}
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("### Recordatorio para WhatsApp")
+            st.markdown(f"<div class='card'>{data.get('recordatorio_whatsapp','')}</div>", unsafe_allow_html=True)
+
+with tab3:
+    st.markdown("## Calendario / historial")
+
+    if not historial:
+        st.info("Todavía no hay publicaciones creadas.")
+    else:
+        for item in reversed(historial[-15:]):
+            st.markdown(f"""
+            <div class="card">
+            <b>{item.get('tipo')}</b> · {item.get('fecha_creacion')}<br>
+            <b>Idea:</b> {item.get('descripcion')}<br>
+            <b>Publicar:</b> {item.get('dia_recomendado')} {item.get('hora_recomendada')}<br>
+            <b>Gancho:</b> {item.get('gancho')}
+            </div>
+            """, unsafe_allow_html=True)
