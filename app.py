@@ -25,8 +25,8 @@ h1,h2,h3,p,label,span {color:white!important;}
  border-radius:14px!important;font-size:17px!important;
 }
 .stButton>button,.stDownloadButton>button {
- background:#ffffff;color:#08080A;border:none;border-radius:14px;
- font-weight:900;padding:0.9rem 1.2rem;width:100%;
+ background:#ffffff!important;color:#08080A!important;border:none;border-radius:14px;
+ font-weight:900!important;padding:0.9rem 1.2rem;width:100%;
 }
 .card {
  background:#111;border:1px solid #2b2b2b;border-radius:18px;
@@ -105,6 +105,45 @@ def wrap(texto, font, max_w):
 
     return lineas
 
+
+
+def generar_plan_semanal(perfil, historial):
+    prompt = f"""
+Eres un community manager para negocios pequeños de Chile.
+
+Crea un plan semanal simple y útil para este negocio.
+
+Devuelve SOLO JSON válido.
+
+Formato:
+{{
+ "resumen":"",
+ "plan":[
+   {{"dia":"","hora":"","tipo":"","idea":"","objetivo":""}}
+ ],
+ "recomendacion_general":""
+}}
+
+Perfil del negocio:
+{json.dumps(perfil, ensure_ascii=False)}
+
+Historial reciente:
+{json.dumps(historial[-8:], ensure_ascii=False)}
+
+Reglas:
+- 4 publicaciones máximo.
+- Evita repetir ideas del historial.
+- Usa los días y horario preferido del negocio si existen.
+- Ideas concretas, no genéricas.
+- Habla como community manager real.
+"""
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.45,
+        response_format={"type": "json_object"}
+    )
+    return json.loads(r.choices[0].message.content)
 
 def generar_con_ia(perfil, descripcion, tipo, historial):
     prompt = f"""
@@ -265,12 +304,80 @@ perfil_default = {
 perfil = load_json(PROFILE_PATH, perfil_default)
 historial = load_json(HISTORY_PATH, [])
 
-st.markdown("<h1>CM IA para negocios</h1>", unsafe_allow_html=True)
-st.write("La app que te dice qué publicar, cuándo publicarlo y te deja el contenido listo.")
+st.markdown("<h1>Community Manager Virtual</h1>", unsafe_allow_html=True)
+st.write("Te dice qué publicar, cuándo publicarlo y te deja el contenido listo.")
 
-tab1, tab2, tab3 = st.tabs(["Crear publicación", "Perfil del negocio", "Calendario / historial"])
+tab1, tab2, tab3, tab4 = st.tabs(["Inicio", "Crear publicación", "Perfil del negocio", "Calendario / historial"])
+
 
 with tab2:
+    st.markdown("## Panel principal")
+
+    if not perfil.get("nombre"):
+        st.warning("Primero completa el perfil del negocio para que el Community Manager Virtual trabaje personalizado.")
+    else:
+        st.markdown(f"""
+        <div class="card good">
+        <h3>{perfil.get("nombre")}</h3>
+        <b>Rubro:</b> {perfil.get("rubro")}<br>
+        <b>Tono:</b> {perfil.get("tono")}<br>
+        <b>Publica idealmente:</b> {perfil.get("dias_publicacion")} · {perfil.get("horario_preferido")}
+        </div>
+        """, unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown(f"""
+        <div class="card">
+        <h3>📅 Próxima publicación</h3>
+        <p>{perfil.get("dias_publicacion", "Define tus días")}<br><b>{perfil.get("horario_preferido", "19:00")}</b></p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        cantidad = len(historial)
+        st.markdown(f"""
+        <div class="card">
+        <h3>📌 Publicaciones creadas</h3>
+        <p><b>{cantidad}</b> publicaciones guardadas</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        ultima = historial[-1]["gancho"] if historial else "Aún no hay contenido"
+        st.markdown(f"""
+        <div class="card">
+        <h3>💡 Última idea</h3>
+        <p>{ultima}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("## Plan semanal")
+
+    if st.button("GENERAR PLAN SEMANAL"):
+        if not perfil.get("nombre"):
+            st.error("Primero guarda el perfil del negocio.")
+        else:
+            with st.spinner("Preparando plan semanal..."):
+                plan = generar_plan_semanal(perfil, historial)
+                st.session_state["plan_semanal"] = plan
+
+    if "plan_semanal" in st.session_state:
+        plan = st.session_state["plan_semanal"]
+        st.markdown(f"<div class='card warn'><b>{plan.get('resumen','')}</b><br>{plan.get('recomendacion_general','')}</div>", unsafe_allow_html=True)
+
+        for item in plan.get("plan", []):
+            st.markdown(f"""
+            <div class="card">
+            <b>{item.get('dia','')} · {item.get('hora','')}</b><br>
+            <b>{item.get('tipo','')}</b>: {item.get('idea','')}<br>
+            <small>{item.get('objetivo','')}</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+with tab4:
     st.markdown("## Perfil único del negocio")
 
     c1, c2 = st.columns(2)
@@ -328,7 +435,7 @@ with tab1:
             elif not descripcion.strip():
                 st.error("Escribe qué quieres comunicar.")
             else:
-                with st.spinner("El CM IA está pensando la publicación..."):
+                with st.spinner("Tu Community Manager Virtual está preparando la publicación..."):
                     data = generar_con_ia(perfil, descripcion, tipo, historial)
                     post = crear_imagen_simple(perfil, data, foto)
 
