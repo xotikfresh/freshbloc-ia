@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 from groq import Groq
-import os, json, io
+import os, json, io, random
 from datetime import datetime
 
 st.set_page_config(page_title="Community Manager Virtual", page_icon="💜", layout="wide")
@@ -133,11 +133,14 @@ Reglas:
 - No inventes precios, fechas, stock, descuentos, eventos ni dirección.
 - Si el usuario da precio o fecha, úsalo.
 - Usa solo servicios y material disponible del perfil.
-- Gancho visual máximo 3 palabras, muy comercial y directo.
+- Gancho visual máximo 4 palabras, comercial y directo.
 - Subtítulo visual máximo 8 palabras.
-- El texto visual debe ser corto, legible y apto para una imagen de Instagram.
+- El texto visual debe salir de lo que el usuario comunicó, no de una interpretación inventada.
+- Si el usuario da producto, precio, horario o promoción, prioriza eso en gancho_visual.
+- No inventes nombres creativos para productos.
 - No escribas frases largas en el texto visual.
 - No uses el nombre del negocio como gancho visual.
+- No pongas el nombre del negocio dentro del texto de la imagen.
 - Si la foto subida no sirve, dilo en idea_foto y sugiere una alternativa fácil.
 - No recomiendes antes/después, testimonios o clientes si el perfil no dice que tiene ese material.
 """
@@ -189,13 +192,14 @@ Reglas:
     return json.loads(r.choices[0].message.content)
 
 
-def crear_imagen_base(perfil, data, foto=None):
+
+def crear_imagen_base(perfil, data, foto=None, variante=0):
     rubro = perfil.get("rubro", "").lower()
 
     if "barber" in rubro:
         fondo, acento = (16, 16, 18), (210, 170, 90)
     elif "cafeter" in rubro or "comida" in rubro or "delivery" in rubro or "restaurante" in rubro:
-        fondo, acento = (255, 248, 236), (170, 95, 35)
+        fondo, acento = (255, 248, 236), (190, 105, 35)
     elif "belleza" in rubro or "uñas" in rubro:
         fondo, acento = (252, 240, 246), (150, 80, 120)
     else:
@@ -207,57 +211,79 @@ def crear_imagen_base(perfil, data, foto=None):
     gancho = data.get("gancho_visual", "").upper().strip()
     subtitulo = data.get("subtitulo_visual", "").strip()
 
-    # Fuerza textos más comerciales y cortos
-    if len(gancho) > 26:
-        gancho = "PROMO DEL DÍA"
+    if len(gancho) > 34:
+        gancho = gancho[:34].strip()
 
-    f_gancho = fuente(86, True)
-    f_sub = fuente(42, True)
-    f_small = fuente(30, True)
+    f_gancho = fuente(82, True)
+    f_sub = fuente(38, True)
+
+    layout = variante % 4
 
     if foto:
         foto_base = Image.open(foto)
 
-        # Imagen principal grande, formato post real
-        main = recortar(foto_base, 1080, 720)
-        img.paste(main, (0, 0))
+        if layout == 0:
+            # Foto arriba grande + bloque inferior
+            main = recortar(foto_base, 1080, 700)
+            img.paste(main, (0, 0))
+            d.rectangle((0, 690, 1080, 1080), fill=fondo)
+            x, y = 70, 760
+            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
+            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
 
-        # Degradado inferior para legibilidad
-        overlay = Image.new("RGBA", (ANCHO, ALTO), (0,0,0,0))
-        od = ImageDraw.Draw(overlay)
-        for y in range(570, 1080):
-            alpha = int(235 * ((y - 570) / 510))
-            od.line((0, y, ANCHO, y), fill=(0,0,0,alpha))
-        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-        d = ImageDraw.Draw(img)
+        elif layout == 1:
+            # Foto completa + franja oscura inferior
+            main = recortar(foto_base, 1080, 1080)
+            img.paste(main, (0, 0))
+            overlay = Image.new("RGBA", (1080,1080), (0,0,0,0))
+            od = ImageDraw.Draw(overlay)
+            od.rectangle((0, 650, 1080, 1080), fill=(0,0,0,210))
+            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+            d = ImageDraw.Draw(img)
+            x, y = 70, 735
+            text_color = (255,255,255)
+            sub_color = (225,225,225)
 
-        # Bloque de texto limpio
-        d.rounded_rectangle((58, 720, 1022, 1015), radius=34, fill=(0,0,0,120))
-        x, y = 82, 748
-        text_color = (255,255,255)
-        sub_color = (225,225,225)
+        elif layout == 2:
+            # Fondo claro, foto circular/rounded centrada
+            d.rectangle((0, 0, 1080, 1080), fill=fondo)
+            main = recortar(foto_base, 850, 620)
+            mask = Image.new("L", (850,620), 0)
+            md = ImageDraw.Draw(mask)
+            md.rounded_rectangle((0,0,850,620), radius=45, fill=255)
+            img.paste(main, (115, 90), mask)
+            x, y = 90, 760
+            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
+            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
+
+        else:
+            # Split editorial
+            d.rectangle((0, 0, 1080, 1080), fill=fondo)
+            main = recortar(foto_base, 540, 1080)
+            img.paste(main, (540, 0))
+            x, y = 65, 330
+            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
+            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
 
     else:
-        d.rounded_rectangle((55,55,1025,1025), radius=40, outline=acento, width=8)
-        x, y = 88, 380
+        d.rounded_rectangle((55,55,1025,1025), radius=42, outline=acento, width=8)
+        x, y = 85, 390
         text_color = (20,20,24)
         sub_color = (70,70,75)
 
-    # Texto principal
-    for l in wrap(gancho, f_gancho, 900)[:2]:
+    # Texto limpio, sin nombre del negocio ni botón
+    for l in wrap(gancho, f_gancho, 900 if layout != 3 else 430)[:2]:
         d.text((x, y), l, font=f_gancho, fill=text_color)
-        y += 92
+        y += 88
 
-    y += 8
+    y += 10
 
-    for l in wrap(subtitulo, f_sub, 860)[:2]:
+    for l in wrap(subtitulo, f_sub, 880 if layout != 3 else 430)[:2]:
         d.text((x, y), l, font=f_sub, fill=sub_color)
-        y += 48
+        y += 44
 
-    # Mini marca discreta abajo, no arriba
-    marca = perfil.get("nombre", "").upper()[:24]
-    if marca:
-        d.text((82, 1005), marca, font=f_small, fill=acento)
+    # Línea/acento visual discreto
+    d.rounded_rectangle((x, min(y + 28, 1015), x + 180, min(y + 40, 1027)), radius=8, fill=acento)
 
     return img
 
@@ -350,7 +376,9 @@ with tab_crear:
             else:
                 with st.spinner("Tu Community Manager Virtual está preparando la publicación..."):
                     data = generar_con_ia(perfil, descripcion, objetivo, historial)
-                    post = crear_imagen_base(perfil, data, foto)
+                    st.session_state['design_variant'] = 0
+                    st.session_state['last_foto'] = foto
+                    post = crear_imagen_base(perfil, data, foto, st.session_state['design_variant'])
 
                     buffer = io.BytesIO()
                     post.save(buffer, format="PNG")
@@ -370,6 +398,19 @@ with tab_crear:
                     save_json(HISTORY_PATH, historial)
 
         if "post_buffer" in st.session_state:
+            if st.button("REHACER DISEÑO"):
+                st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
+                post = crear_imagen_base(
+                    perfil,
+                    st.session_state["data"],
+                    st.session_state.get("last_foto"),
+                    st.session_state["design_variant"]
+                )
+                buffer = io.BytesIO()
+                post.save(buffer, format="PNG")
+                buffer.seek(0)
+                st.session_state["post_buffer"] = buffer.getvalue()
+
             st.image(st.session_state["post_buffer"], use_container_width=True)
             st.download_button("DESCARGAR IMAGEN", data=st.session_state["post_buffer"], file_name=f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png", mime="image/png")
 
