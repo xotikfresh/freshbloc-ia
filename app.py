@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
 from groq import Groq
-import os, random, json, io, base64
+import os, json, io, base64
 from datetime import datetime
 
 st.set_page_config(page_title="Freshbloc IA", page_icon="FRBL", layout="centered")
@@ -10,26 +10,22 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 ANCHO, ALTO = 1080, 1350
 MORADO = (145, 60, 255)
-MORADO_ENTREVISTA = (125, 40, 230)
+MORADO_OSCURO = (125, 40, 230)
 NEGRO = (8, 8, 10)
 BLANCO = (245, 245, 245)
-GRIS = (190, 190, 190)
-SUB_BLANCO = (225, 225, 225)
-MAX_CITA = 65
-EXTENSIONES = (".jpg", ".jpeg", ".png", ".webp")
 
 st.markdown("""
 <style>
 .stApp {background: linear-gradient(180deg,#08080A,#13001F); color:white;}
-.block-container {max-width:760px; padding:1rem;}
+.block-container {max-width:780px; padding:1rem;}
 h1,h2,h3,p,label,span {color:white!important;}
 .logo-title {display:flex; align-items:center; gap:16px; margin-bottom:10px;}
-.logo-title img {width:170px; max-width:45vw;}
-.logo-title .brand,.logo-title .ia {font-size:44px; font-weight:900;}
+.logo-title img {width:160px; max-width:45vw;}
+.logo-title .brand,.logo-title .ia {font-size:42px; font-weight:900;}
 .logo-title .ia {color:#913CFF!important;}
-.stTextArea textarea {
+.stTextArea textarea, .stTextInput input {
  background:#111!important; color:white!important; border:1px solid #913CFF!important;
- font-size:20px!important; border-radius:14px!important;
+ font-size:18px!important; border-radius:14px!important;
 }
 [data-testid="stFileUploader"] {
  background:#3a0f70; padding:18px; border-radius:18px; border:1px solid #913CFF;
@@ -42,6 +38,10 @@ h1,h2,h3,p,label,span {color:white!important;}
  background:#111; border:1px solid #913CFF; padding:16px; border-radius:14px;
  font-size:17px; line-height:1.45;
 }
+.small-box {
+ background:#170020; border:1px solid #4d1d80; padding:13px; border-radius:14px;
+ font-size:16px; line-height:1.45;
+}
 @media(max-width:600px){
  .logo-title img{width:115px;}
  .logo-title .brand,.logo-title .ia{font-size:32px;}
@@ -51,18 +51,12 @@ h1,h2,h3,p,label,span {color:white!important;}
 
 
 def cargar_fuente(tamano, tipo="bold"):
-    if tipo == "display":
-        fuentes = [
-            "assets/Anton-Regular.ttf",
-            "assets/Montserrat-Bold.ttf",
-            "arialbd.ttf",
-        ]
-    else:
-        fuentes = [
-            "assets/Montserrat-Bold.ttf",
-            "assets/Anton-Regular.ttf",
-            "arialbd.ttf",
-        ]
+    fuentes = [
+        "assets/Anton-Regular.ttf" if tipo == "display" else "assets/Montserrat-Bold.ttf",
+        "assets/Montserrat-Bold.ttf",
+        "assets/Anton-Regular.ttf",
+        "arialbd.ttf",
+    ]
 
     for fuente in fuentes:
         try:
@@ -134,7 +128,7 @@ def recortar_cuadrado(imagen, tamano):
     return imagen.crop((x, y, x + lado, y + lado)).resize((tamano, tamano))
 
 
-def poner_logo(img, tamano=280, pos=(55, 55)):
+def poner_logo(img, tamano=260, pos=(55, 55)):
     logo_path = "logo/frbl.png"
     if os.path.exists(logo_path):
         logo = Image.open(logo_path).convert("RGBA")
@@ -148,52 +142,33 @@ def poner_logo(img, tamano=280, pos=(55, 55)):
     return img
 
 
-def obtener_artistas():
-    if not os.path.exists("fotos"):
-        return []
-    return [
-        n for n in os.listdir("fotos")
-        if os.path.isdir(os.path.join("fotos", n))
-    ]
-
-
-def elegir_foto(artista):
-    carpeta = os.path.join("fotos", artista)
-
-    if not os.path.exists(carpeta):
-        raise Exception(f"No existe la carpeta de fotos para: {artista}")
-
-    imgs = [
-        a for a in os.listdir(carpeta)
-        if a.lower().endswith(EXTENSIONES)
-    ]
-
-    if not imgs:
-        raise Exception(f"No hay imágenes en: {carpeta}")
-
-    return os.path.join(carpeta, random.choice(imgs))
-
-
-def fondo_foto(imagen):
+def fondo_con_foto(imagen):
     img = recortar_vertical(imagen, ANCHO, ALTO)
-    img = Image.blend(img, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.18)
+    img = Image.blend(img, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.22)
 
     overlay = Image.new("RGBA", (ANCHO, ALTO), (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
 
     for y in range(ALTO):
-        if y > 430:
-            a = min(int(245 * ((y - 430) / (ALTO - 430))), 245)
+        if y > 420:
+            a = min(int(245 * ((y - 420) / (ALTO - 420))), 245)
             d.line((0, y, ANCHO, y), fill=(0, 0, 0, a))
 
     return Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
 
+def fondo_simple():
+    img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 0, ANCHO, 430), fill=MORADO)
+    d.ellipse((620, -250, 1350, 450), fill=(45, 15, 80))
+    return img
+
+
 def limpiar_datos(datos):
     campos = [
-        "categoria", "artista", "titulo", "gancho", "subtitulo",
-        "caption", "hashtags", "fecha", "tema", "album", "ep",
-        "colaboracion", "productor"
+        "tipo", "titulo", "gancho", "subtitulo", "caption",
+        "historia", "whatsapp", "hashtags", "cta", "idea_visual"
     ]
 
     for campo in campos:
@@ -201,467 +176,190 @@ def limpiar_datos(datos):
             datos[campo] = [] if campo == "hashtags" else ""
 
     if not isinstance(datos["hashtags"], list):
-        datos["hashtags"] = ["#Freshbloc", "#UrbanoChileno", "#GeneroUrbano"]
+        datos["hashtags"] = ["#NegocioLocal", "#Emprendimiento", "#Chile"]
 
     return datos
 
 
-def analizar_noticia(texto, plantilla, cita_manual=""):
-    artistas = obtener_artistas()
+def analizar_publicacion(nombre_negocio, rubro, tono, tipo_publicacion, descripcion):
+    prompt = f"""
+Eres un community manager experto en pequeños negocios de Chile.
 
-    base = f"""
-Artistas disponibles:
-{artistas}
+Tu tarea es crear contenido listo para publicar en Instagram, historias y WhatsApp.
 
 Devuelve SOLO JSON válido. No agregues explicación.
 
 Formato obligatorio:
 {{
-    "categoria":"",
-    "artista":"",
-    "titulo":"",
-    "gancho":"",
-    "subtitulo":"",
-    "caption":"",
-    "hashtags":[],
-    "fecha":"",
-    "tema":"",
-    "album":"",
-    "ep":"",
-    "colaboracion":"",
-    "productor":""
+  "tipo":"",
+  "titulo":"",
+  "gancho":"",
+  "subtitulo":"",
+  "caption":"",
+  "historia":"",
+  "whatsapp":"",
+  "hashtags":[],
+  "cta":"",
+  "idea_visual":""
 }}
 
-Reglas generales:
-- "artista" debe ser EXACTAMENTE una carpeta disponible.
-- "titulo" debe ser el nombre visible del artista.
-- No inventes datos, fechas, colaboraciones, productores ni canciones.
-- Usa solamente información presente en el texto.
-- Si no existe un dato, devuelve "".
-- caption entre 45 y 90 palabras.
-- hashtags entre 3 y 6.
-- Tono: página urbana chilena, cercano, noticioso, con energía.
-"""
+Datos del negocio:
+- Nombre: {nombre_negocio}
+- Rubro: {rubro}
+- Tono de marca: {tono}
+- Tipo de publicación: {tipo_publicacion}
 
-    if plantilla == "Lanzamiento / Portada":
-        prompt = f"""
-Eres editor musical de Freshbloc, una página chilena de música urbana.
-
-Tu trabajo no es escribir bonito solamente.
-Tu trabajo es encontrar el dato más importante de la noticia y transformarlo en un post con energía.
-
-{base}
-
-Plantilla: LANZAMIENTO.
-
-OBJETIVO:
-Crear un post de lanzamiento que parezca hecho por una página urbana real.
-
-PRIORIDAD DE INFORMACIÓN:
-1. Fecha de lanzamiento.
-2. Nombre del tema.
-3. Nombre del álbum.
-4. Nombre del EP.
-5. Colaboración.
-6. Productor.
-7. Contexto del anuncio.
-
-EXTRACCIÓN:
-Identifica si existen estos datos:
-- fecha de lanzamiento
-- nombre del tema
-- nombre del álbum
-- nombre del EP
-- colaboración
-- productor
-
-Si un dato no existe, devuelve "".
-
-REGLAS OBLIGATORIAS:
-- categoria = "LANZAMIENTO".
-- No inventes colaboraciones.
-- No inventes canciones.
-- No inventes fechas.
-- No inventes discos, álbumes o EP.
-- Si el texto menciona una fecha, debe ir en "fecha" y en "subtitulo".
-- Si menciona EP, debe ir en "ep".
-- Si menciona álbum o disco, debe ir en "album".
-- Si menciona tema o sencillo, debe ir en "tema".
-- Si menciona colaboración, debe ir en "colaboracion".
-- Si menciona productor, debe ir en "productor".
-- No repitas la misma idea en gancho y subtitulo.
-
-PROHIBIDO EN GANCHO Y SUBTITULO:
-- "El artista presenta su nuevo proyecto"
-- "El artista adelanta su próximo proyecto"
-- "Nueva etapa para el artista"
-- "El artista sorprende"
-- "Se viene música nueva"
-- "Lanza nuevo tema"
-- "Nueva canción"
-- "Nuevo proyecto"
-- "Música nueva"
-
-GANCHO:
-- Máximo 4 palabras.
-- Todo en mayúsculas.
-- Debe sonar fuerte.
-- Debe generar curiosidad.
-- No debe ser una frase genérica.
-
-GANCHOS PREFERIDOS:
-- FECHA CONFIRMADA
-- NUEVO EP
-- NUEVO ÁLBUM
-- VUELVE CON MÚSICA
-- YA ES OFICIAL
-- SE ACTIVA EL ESTRENO
-- SE ACTIVA EL JUNTE
-- PREPARA EL GOLPE
-- CALIENTA MOTORES
-- ROMPE EL SILENCIO
-
-SUBTITULO:
-- Máximo 14 palabras.
-- Debe agregar dato concreto.
-- Si hay fecha, inclúyela.
-- Si hay tema, inclúyelo.
-- Si hay colaboración, inclúyela.
-- Si hay EP o álbum, inclúyelo.
-- No repetir el gancho.
-
-CAPTION:
-- Entre 45 y 90 palabras.
-- Debe sonar humano.
-- Debe usar los datos entregados.
-- No exagerar.
-- No inventar detalles.
-- Puede cerrar con una pregunta breve a la audiencia.
-
-BUENOS EJEMPLOS:
-
-Texto:
-"AK420 estrena No Me Llamen junto a Julianno Sosa el 20 de junio"
-
-Respuesta:
-{{
- "categoria":"LANZAMIENTO",
- "artista":"ak420",
- "titulo":"AK420",
- "gancho":"FECHA CONFIRMADA",
- "subtitulo":"No Me Llamen llega el 20 de junio",
- "caption":"AK420 ya tiene fecha para su próximo movimiento. El artista prepara el estreno de No Me Llamen junto a Julianno Sosa, una colaboración que empieza a generar ruido dentro de la escena urbana. El lanzamiento quedó fijado para el 20 de junio.",
- "hashtags":["#AK420","#JuliannoSosa","#UrbanoChileno","#Freshbloc"],
- "fecha":"20 de junio",
- "tema":"No Me Llamen",
- "album":"",
- "ep":"",
- "colaboracion":"Julianno Sosa",
- "productor":""
-}}
-
-Texto:
-"Jere Klein anuncia nuevo EP"
-
-Respuesta:
-{{
- "categoria":"LANZAMIENTO",
- "artista":"jere_klein",
- "titulo":"Jere Klein",
- "gancho":"NUEVO EP",
- "subtitulo":"El proyecto fue anunciado oficialmente esta semana",
- "caption":"Jere Klein vuelve a mover la conversación tras anunciar un nuevo EP. El artista suma otro capítulo a su carrera y deja expectativa entre sus seguidores por lo que puede venir en esta nueva etapa musical.",
- "hashtags":["#JereKlein","#NuevoEP","#UrbanoChileno","#Freshbloc"],
- "fecha":"",
- "tema":"",
- "album":"",
- "ep":"nuevo EP",
- "colaboracion":"",
- "productor":""
-}}
-
-Texto:
-"King Savagge estrena colaboración con Balbi El Chamako"
-
-Respuesta:
-{{
- "categoria":"LANZAMIENTO",
- "artista":"king_savagge",
- "titulo":"King Savagge",
- "gancho":"SE ACTIVA EL JUNTE",
- "subtitulo":"La colaboración con Balbi El Chamako ya fue confirmada",
- "caption":"King Savagge vuelve a encender la escena con una nueva colaboración junto a Balbi El Chamako. El anuncio ya empezó a moverse entre los seguidores del género urbano chileno.",
- "hashtags":["#KingSavagge","#BalbiElChamako","#UrbanoChileno","#Freshbloc"],
- "fecha":"",
- "tema":"",
- "album":"",
- "ep":"",
- "colaboracion":"Balbi El Chamako",
- "productor":""
-}}
-
-Información:
-{texto}
-"""
-
-    elif plantilla == "Quote / Entrevista":
-        prompt = f"""
-Eres editor de entrevistas de Freshbloc.
-
-{base}
-
-Plantilla: ENTREVISTA.
-
-Cita exacta:
-{cita_manual}
+Lo que quiere publicar:
+{descripcion}
 
 Reglas:
-- categoria = "ENTREVISTA".
-- Si hay cita exacta, gancho debe ser EXACTAMENTE esa cita.
-- No inventes citas.
-- No parafrasees la cita exacta.
-- subtitulo debe dar contexto en máximo 15 palabras.
-- caption debe explicar por qué esa frase importa.
+- No inventes precios, fechas, stock, descuentos ni direcciones.
+- Usa solo los datos entregados.
+- Si falta información, escribe de forma útil sin inventar.
+- "titulo" debe ser el nombre del negocio o una versión corta.
+- "gancho" máximo 4 palabras, en mayúsculas, fuerte y claro.
+- "subtitulo" máximo 12 palabras.
+- "caption" entre 45 y 90 palabras.
+- "historia" debe ser corto, estilo story de Instagram.
+- "whatsapp" debe ser un mensaje breve para enviar a clientes.
+- "hashtags" entre 5 y 8, mezclando rubro + ciudad si aparece + negocio local.
+- "cta" debe ser una llamada a la acción breve.
+- "idea_visual" debe explicar cómo debería verse el diseño.
+- No uses lenguaje robótico.
+- No uses emojis excesivos.
+- No repitas el nombre del negocio muchas veces.
 
-Información:
-{texto}
-"""
-
-    elif plantilla == "Radar / Emergente":
-        prompt = f"""
-Eres curador de Freshbloc Radar.
-
-{base}
-
-Plantilla: RADAR.
-
-Reglas:
-- categoria = "RADAR".
-- gancho máximo 5 palabras.
-- subtitulo máximo 7 palabras.
-- No repitas el nombre del artista en gancho ni subtitulo.
-- No escribas frases largas.
-- Usa estilo corto de Instagram.
-- Evita explicar demasiado.
-
-Buenos ganchos:
-- EN LA MIRA
-- NUEVO SONIDO
-- ATENTO A ESTE NOMBRE
-- RADAR ACTIVADO
-- PROMETE EN LA ESCENA
-
-Buenos subtitulos:
-- Nuevo movimiento en la escena
-- Nombre para tener presente
-- Va tomando espacio propio
-- Su sonido empieza a moverse
-
-Información:
-{texto}
-"""
-
-    else:
-        prompt = f"""
-Eres editor de Freshbloc, medio urbano chileno.
-
-{base}
-
-Plantilla: NOTICIA.
-
-Reglas:
-- categoria puede ser NOTICIA, LANZAMIENTO, TENDENCIA, EVENTO o RADAR.
-- gancho debe ser noticioso y fuerte.
-- subtitulo debe explicar el hecho concreto.
-- No uses "junte" si no hay colaboración.
-- Prioriza datos concretos: fecha, nombres, declaración, anuncio, tendencia.
-
-Información:
-{texto}
+Estilo:
+- Profesional, vendible y humano.
+- Debe sonar como negocio real, no como IA.
 """
 
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.18,
+        temperature=0.35,
         response_format={"type": "json_object"}
     )
 
     datos = json.loads(r.choices[0].message.content)
-    datos = limpiar_datos(datos)
-
-    if plantilla == "Quote / Entrevista" and cita_manual.strip():
-        datos["gancho"] = cita_manual.strip()
-
-    if plantilla == "Lanzamiento / Portada":
-        raw = texto.lower()
-
-        if datos["fecha"] and datos["tema"]:
-            datos["gancho"] = "FECHA CONFIRMADA"
-            datos["subtitulo"] = f"{datos['tema']} llega el {datos['fecha']}"
-
-        elif datos["fecha"] and datos["colaboracion"]:
-            datos["gancho"] = "SE ACTIVA EL JUNTE"
-            datos["subtitulo"] = f"Junto a {datos['colaboracion']} este {datos['fecha']}"
-
-        elif datos["fecha"]:
-            datos["gancho"] = "FECHA CONFIRMADA"
-            datos["subtitulo"] = f"El estreno quedó fijado para el {datos['fecha']}"
-
-        elif datos["colaboracion"]:
-            datos["gancho"] = "SE ACTIVA EL JUNTE"
-            datos["subtitulo"] = f"Junto a {datos['colaboracion']}"
-
-        elif datos["album"]:
-            datos["gancho"] = "NUEVO ÁLBUM"
-            datos["subtitulo"] = f"{datos['album']} marca una nueva etapa"
-
-        elif datos["ep"]:
-            datos["gancho"] = "NUEVO EP"
-            datos["subtitulo"] = f"{datos['ep']} ya empieza a moverse"
-
-        elif "disco" in raw:
-            datos["gancho"] = "ANUNCIA NUEVO DISCO"
-            datos["subtitulo"] = "El anuncio encendió la expectativa en redes"
-
-        elif "album" in raw or "álbum" in raw:
-            datos["gancho"] = "NUEVO ÁLBUM"
-            datos["subtitulo"] = "El proyecto ya empieza a generar movimiento"
-
-        elif "tema" in raw or "sencillo" in raw:
-            datos["gancho"] = "VUELVE CON MÚSICA"
-            datos["subtitulo"] = "El estreno comienza a moverse entre sus seguidores"
-
-        if not any(x in raw for x in ["colab", "junte", "junto", "ft", "feat"]):
-            if any(p in datos.get("subtitulo", "").lower() for p in ["junte", "colaboración", "colaboracion", "junto"]):
-                datos["subtitulo"] = "El estreno comienza a moverse entre sus seguidores"
-
-    if plantilla == "Radar / Emergente":
-        if len(datos.get("gancho", "").split()) > 5:
-            raw_radar = texto.lower()
-            if "colab" in raw_radar or "junto" in raw_radar or "junte" in raw_radar:
-                datos["gancho"] = "NUEVO JUNTE"
-            elif "tema" in raw_radar or "lanzamiento" in raw_radar or "estrena" in raw_radar:
-                datos["gancho"] = "NUEVO SONIDO"
-            else:
-                datos["gancho"] = "EN LA MIRA"
-
-        if len(datos.get("subtitulo", "").split()) > 7:
-            datos["subtitulo"] = "Nombre para tener presente"
-
-    if not datos.get("caption"):
-        datos["caption"] = f"{datos.get('titulo','El artista')} volvió a mover la conversación dentro de la escena urbana."
-
-    if not datos.get("hashtags"):
-        datos["hashtags"] = ["#Freshbloc", "#UrbanoChileno", "#GeneroUrbano"]
-
-    return datos
+    return limpiar_datos(datos)
 
 
-def plantilla_noticia(datos, imagen):
-    img = fondo_foto(imagen)
+def plantilla_promocion(datos, imagen=None):
+    img = fondo_con_foto(imagen) if imagen else fondo_simple()
     img = poner_logo(img)
     d = ImageDraw.Draw(img)
 
     f_cat = cargar_fuente(36, "display")
-    f_art = cargar_fuente(82, "display")
-    f_gan = cargar_fuente(92, "display")
-    f_sub = cargar_fuente(58, "display")
+    f_titulo = cargar_fuente(82, "display")
+    f_gancho = cargar_fuente(94, "display")
+    f_sub = cargar_fuente(54, "bold")
 
-    cat = datos["categoria"].upper()
+    cat = datos["tipo"].upper()
     w = d.textbbox((0, 0), cat, font=f_cat)[2]
     d.text((ANCHO - w - 55, 70), cat, font=f_cat, fill=MORADO)
 
-    d.text((55, 805), datos["titulo"].upper(), font=f_art, fill=BLANCO)
+    d.text((55, 790), datos["titulo"].upper(), font=f_titulo, fill=BLANCO)
 
-    y = 905
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
-        d.text((55, y), linea, font=f_gan, fill=MORADO)
-        y += 98
+    y = 900
+    for linea in dividir_texto(datos["gancho"].upper(), f_gancho, 780)[:2]:
+        d.text((55, y), linea, font=f_gancho, fill=MORADO)
+        y += 100
 
-    y += 5
-
+    y += 10
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-        d.text(
-            (55, y),
-            linea,
-            font=f_sub,
-            fill=(235,235,235)
-        )
-        y += 65
+        d.text((55, y), linea, font=f_sub, fill=BLANCO)
+        y += 62
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
 
 
-def plantilla_lanzamiento(datos, imagen):
+def plantilla_producto(datos, imagen=None):
     img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
-
-    fondo = recortar_vertical(imagen, ANCHO, ALTO).filter(ImageFilter.GaussianBlur(45))
-    fondo = Image.blend(fondo, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.62)
-    img.paste(fondo, (0, 0))
-
     d = ImageDraw.Draw(img)
 
-    portada = recortar_cuadrado(imagen, 620)
-    img.paste(portada, (230, 105))
-    d.rectangle((210, 85, 870, 745), outline=MORADO, width=10)
+    if imagen:
+        fondo = recortar_vertical(imagen, ANCHO, ALTO).filter(ImageFilter.GaussianBlur(45))
+        fondo = Image.blend(fondo, Image.new("RGB", (ANCHO, ALTO), NEGRO), 0.65)
+        img.paste(fondo, (0, 0))
 
-    img = poner_logo(img, tamano=260, pos=(55, 55))
+        producto = recortar_cuadrado(imagen, 620)
+        img.paste(producto, (230, 105))
+        d.rectangle((210, 85, 870, 745), outline=MORADO, width=10)
+    else:
+        d.rectangle((210, 85, 870, 745), outline=MORADO, width=10)
+        d.text((280, 360), "TU PRODUCTO", font=cargar_fuente(72, "display"), fill=BLANCO)
+
+    img = poner_logo(img, tamano=250, pos=(55, 55))
     d = ImageDraw.Draw(img)
 
     f_tag = cargar_fuente(48, "display")
-    f_art = cargar_fuente(95, "display")
-    f_gan = cargar_fuente(125, "display")
-    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 54)
+    f_titulo = cargar_fuente(86, "display")
+    f_gan = cargar_fuente(112, "display")
+    f_sub = cargar_fuente(52, "bold")
 
     y = 770
-
-    d.text((55, y), "LANZAMIENTO", font=f_tag, fill=MORADO)
+    d.text((55, y), datos["tipo"].upper(), font=f_tag, fill=MORADO)
     y += 78
 
-    d.text((55, y), datos["titulo"].upper(), font=f_art, fill=BLANCO, stroke_width=2, stroke_fill=(255,255,255))
-    y += 120
+    d.text((55, y), datos["titulo"].upper(), font=f_titulo, fill=BLANCO)
+    y += 112
 
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
-        d.text(
-            (55, y),
-            linea,
-            font=f_gan,
-            fill=BLANCO,
-            stroke_width=2,
-            stroke_fill=(255,255,255)
-        )
-        y += 135
+    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 850)[:2]:
+        d.text((55, y), linea, font=f_gan, fill=BLANCO)
+        y += 120
 
-    y += 20
-
+    y += 10
     for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:2]:
-        d.text(
-            (55, y),
-            linea,
-            font=f_sub,
-            fill=(255, 255, 255)
-        )
+        d.text((55, y), linea, font=f_sub, fill=BLANCO)
         y += 58
 
     d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
     return img
 
 
-def plantilla_quote(datos, imagen):
+def plantilla_evento(datos, imagen=None):
     img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
     d = ImageDraw.Draw(img)
 
-    d.rectangle((0, 0, 470, ALTO), fill=MORADO_ENTREVISTA)
+    d.rectangle((0, 0, ANCHO, 430), fill=MORADO)
+    d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
+    d.text((55, 155), datos["tipo"].upper(), font=cargar_fuente(88, "display"), fill=BLANCO)
 
-    foto = recortar_vertical(imagen, 620, ALTO)
-    foto = Image.blend(foto, Image.new("RGB", (620, ALTO), NEGRO), 0.25)
-    img.paste(foto, (460, 0))
+    if imagen:
+        foto = recortar_cuadrado(imagen, 650)
+        img.paste(foto, (215, 255))
+        d.rectangle((200, 240, 880, 920), outline=BLANCO, width=8)
+
+    d.text((55, 940), datos["titulo"].upper(), font=cargar_fuente(82, "display"), fill=(220, 220, 220))
+
+    y = 1040
+    for linea in dividir_texto(datos["gancho"].upper(), cargar_fuente(58, "display"), 850)[:2]:
+        d.text((55, y), linea, font=cargar_fuente(58, "display"), fill=MORADO)
+        y += 66
+
+    for linea in dividir_texto(datos["subtitulo"], cargar_fuente(48, "bold"), 900)[:2]:
+        d.text((55, y + 10), linea, font=cargar_fuente(48, "bold"), fill=BLANCO)
+        y += 56
+
+    d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
+    return img
+
+
+def plantilla_testimonio(datos, imagen=None):
+    img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
+    d = ImageDraw.Draw(img)
+
+    d.rectangle((0, 0, 470, ALTO), fill=MORADO_OSCURO)
+
+    if imagen:
+        foto = recortar_vertical(imagen, 620, ALTO)
+        foto = Image.blend(foto, Image.new("RGB", (620, ALTO), NEGRO), 0.25)
+        img.paste(foto, (460, 0))
 
     sombra = Image.new("RGBA", (ANCHO, ALTO), (0, 0, 0, 0))
     sd = ImageDraw.Draw(sombra)
-
     for x in range(430, 720):
         a = int(210 * (1 - (x - 430) / 290))
         sd.line((x, 0, x, ALTO), fill=(0, 0, 0, a))
@@ -670,83 +368,35 @@ def plantilla_quote(datos, imagen):
     d = ImageDraw.Draw(img)
 
     d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
-    d.text((55, 220), "ENTREVISTA", font=cargar_fuente(36, "display"), fill=BLANCO)
+    d.text((55, 220), datos["tipo"].upper(), font=cargar_fuente(36, "display"), fill=BLANCO)
     d.text((55, 340), "“", font=cargar_fuente(150, "display"), fill=BLANCO)
 
     cita = datos["gancho"].upper().strip()
-    largo = len(cita)
-
-    if largo <= 35:
-        tam_quote = 70
-        y = 455
-    elif largo <= 55:
-        tam_quote = 60
-        y = 465
-    else:
-        tam_quote = 52
-        y = 480
-
-    f_quote = cargar_fuente(tam_quote, "display")
-
+    f_quote = cargar_fuente(58, "display")
+    y = 475
     for linea in dividir_texto(cita, f_quote, 390)[:6]:
         d.text((55, y), linea, font=f_quote, fill=BLANCO)
-        y += tam_quote + 8
+        y += 66
 
-    # Abajo: blanco grueso, sin transparencia
-    f_autor = cargar_fuente(54, "display")
-    f_sub = cargar_fuente(44, "display")
+    d.text((55, 930), datos["titulo"].upper(), font=cargar_fuente(54, "display"), fill=BLANCO)
 
-    d.text((55, 930), f"— {datos['titulo'].upper()}", font=f_autor, fill=BLANCO)
-
-    y = 1005
-    for linea in dividir_texto(datos["subtitulo"], f_sub, 380)[:3]:
-        d.text((55, y), linea, font=f_sub, fill=BLANCO)
-        y += 58
+    y = 1010
+    for linea in dividir_texto(datos["subtitulo"], cargar_fuente(42, "bold"), 380)[:3]:
+        d.text((55, y), linea, font=cargar_fuente(42, "bold"), fill=BLANCO)
+        y += 54
 
     d.rectangle((55, 1285, 420, 1292), fill=BLANCO)
     return img
 
 
-def plantilla_radar(datos, imagen):
-    img = Image.new("RGB", (ANCHO, ALTO), NEGRO)
-    d = ImageDraw.Draw(img)
-
-    d.rectangle((0, 0, ANCHO, 420), fill=MORADO)
-    d.rectangle((0, 420, ANCHO, ALTO), fill=NEGRO)
-
-    # Logo FRBL limpio, mismo estilo editorial
-    d.text((55, 65), "FRBL", font=cargar_fuente(78, "display"), fill=(0, 0, 0))
-    d.text((55, 150), "RADAR", font=cargar_fuente(90, "display"), fill=BLANCO)
-
-    foto = recortar_cuadrado(imagen, 650)
-    img.paste(foto, (215, 250))
-    d.rectangle((200, 235, 880, 915), outline=BLANCO, width=8)
-
-    d.text((55, 925), datos["titulo"].upper(), font=cargar_fuente(86, "display"), fill=(210,210,210))
-
-    y = 1030
-    f_gan = cargar_fuente(52, "display")
-    for linea in dividir_texto(datos["gancho"].upper(), f_gan, 760)[:2]:
-        d.text((55, y), linea, font=f_gan, fill=MORADO)
-        y += 58
-
-    f_sub = ImageFont.truetype("assets/Montserrat-Bold.ttf", 50)
-    for linea in dividir_texto(datos["subtitulo"], f_sub, 900)[:3]:
-        d.text((55, y + 10), linea, font=f_sub, fill=BLANCO)
-        y += 56
-
-    d.rectangle((55, 1285, 1025, 1292), fill=MORADO)
-    return img
-
-
-def generar_post(plantilla, datos, imagen):
-    if plantilla == "Lanzamiento / Portada":
-        return plantilla_lanzamiento(datos, imagen)
-    if plantilla == "Quote / Entrevista":
-        return plantilla_quote(datos, imagen)
-    if plantilla == "Radar / Emergente":
-        return plantilla_radar(datos, imagen)
-    return plantilla_noticia(datos, imagen)
+def generar_post(tipo_publicacion, datos, imagen):
+    if tipo_publicacion == "Producto":
+        return plantilla_producto(datos, imagen)
+    if tipo_publicacion == "Evento":
+        return plantilla_evento(datos, imagen)
+    if tipo_publicacion == "Testimonio":
+        return plantilla_testimonio(datos, imagen)
+    return plantilla_promocion(datos, imagen)
 
 
 if "post_buffer" not in st.session_state:
@@ -754,6 +404,7 @@ if "post_buffer" not in st.session_state:
 
 if "datos" not in st.session_state:
     st.session_state.datos = None
+
 
 if os.path.exists("logo/frbl.png"):
     logo_b64 = base64.b64encode(open("logo/frbl.png", "rb").read()).decode()
@@ -767,52 +418,74 @@ if os.path.exists("logo/frbl.png"):
 else:
     st.markdown("<h1>freshbloc IA</h1>", unsafe_allow_html=True)
 
-st.write("Generador de publicaciones urbanas para Instagram.")
+st.write("Tu contenido de Instagram listo en menos de 1 minuto.")
 
-plantilla = st.selectbox("Escoge plantilla", [
-    "Noticia / Foto artista",
-    "Lanzamiento / Portada",
-    "Quote / Entrevista",
-    "Radar / Emergente"
+st.markdown("### Perfil del negocio")
+
+nombre_negocio = st.text_input("Nombre del negocio", placeholder="Ej: Barbería El Corte")
+rubro = st.selectbox("Rubro", [
+    "Barbería",
+    "Restaurante",
+    "Cafetería",
+    "Tienda de ropa",
+    "Gimnasio",
+    "Belleza / uñas",
+    "Minimarket",
+    "Delivery",
+    "Otro"
 ])
 
-noticia = st.text_area("Pega la noticia", height=150)
+tono = st.selectbox("Tono de marca", [
+    "Cercano",
+    "Juvenil",
+    "Profesional",
+    "Premium",
+    "Divertido",
+    "Urgente / venta rápida"
+])
 
-cita_manual = ""
-if plantilla == "Quote / Entrevista":
-    cita_manual = st.text_area(
-        f"Cita exacta del artista — máximo {MAX_CITA} caracteres",
-        height=110,
-        max_chars=MAX_CITA
-    )
+tipo_publicacion = st.selectbox("Tipo de publicación", [
+    "Promoción",
+    "Producto",
+    "Evento",
+    "Testimonio"
+])
 
-modo_imagen = st.radio("Imagen para el post", ["Subir imagen manual", "Usar foto aleatoria del artista"])
+descripcion = st.text_area(
+    "Describe qué quieres publicar",
+    height=150,
+    placeholder="Ej: Tenemos 20% de descuento en cortes + barba hasta este viernes para estudiantes."
+)
 
 rotacion_img = st.selectbox("Rotación de imagen", [0, 90, 180, 270], index=0)
 
-imagen_subida = None
-if modo_imagen == "Subir imagen manual":
-    imagen_subida = st.file_uploader("Sube portada, foto, flyer o screenshot", type=["jpg", "jpeg", "png", "webp"])
+imagen_subida = st.file_uploader(
+    "Sube una imagen del producto, local, flyer o referencia",
+    type=["jpg", "jpeg", "png", "webp"]
+)
 
-if st.button("GENERAR POST"):
-    if not noticia.strip():
-        st.error("Pega una noticia primero.")
-    elif plantilla == "Quote / Entrevista" and not cita_manual.strip():
-        st.error("Para entrevista, pega una cita exacta.")
+if st.button("GENERAR CONTENIDO"):
+    if not nombre_negocio.strip():
+        st.error("Escribe el nombre del negocio.")
+    elif not descripcion.strip():
+        st.error("Describe qué quieres publicar.")
     else:
-        with st.spinner("Generando con Freshbloc IA..."):
-            datos = analizar_noticia(noticia, plantilla, cita_manual)
+        with st.spinner("Generando contenido con Freshbloc IA..."):
+            datos = analizar_publicacion(
+                nombre_negocio,
+                rubro,
+                tono,
+                tipo_publicacion,
+                descripcion
+            )
 
-            if modo_imagen == "Subir imagen manual":
-                if imagen_subida is None:
-                    st.error("Sube una imagen primero.")
-                    st.stop()
+            datos["tipo"] = tipo_publicacion.upper()
+
+            imagen = None
+            if imagen_subida is not None:
                 imagen = abrir_imagen_segura(imagen_subida, rotacion_img)
-            else:
-                ruta = elegir_foto(datos["artista"])
-                imagen = abrir_imagen_segura(ruta, rotacion_img)
 
-            post = generar_post(plantilla, datos, imagen)
+            post = generar_post(tipo_publicacion, datos, imagen)
 
             buffer = io.BytesIO()
             post.save(buffer, format="PNG")
@@ -827,15 +500,24 @@ if st.session_state.post_buffer:
     st.download_button(
         "DESCARGAR POST",
         data=st.session_state.post_buffer,
-        file_name=f"freshbloc_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+        file_name=f"freshbloc_negocio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
         mime="image/png"
     )
 
 if st.session_state.datos:
     datos = st.session_state.datos
 
-    st.markdown("### Caption")
+    st.markdown("### Caption Instagram")
     st.markdown(f"<div class='caption-box'>{datos.get('caption','')}</div>", unsafe_allow_html=True)
+
+    st.markdown("### Historia Instagram")
+    st.markdown(f"<div class='small-box'>{datos.get('historia','')}</div>", unsafe_allow_html=True)
+
+    st.markdown("### Mensaje WhatsApp")
+    st.markdown(f"<div class='small-box'>{datos.get('whatsapp','')}</div>", unsafe_allow_html=True)
 
     st.markdown("### Hashtags")
     st.markdown(f"<div class='caption-box'>{' '.join(datos.get('hashtags', []))}</div>", unsafe_allow_html=True)
+
+    st.markdown("### Idea visual")
+    st.markdown(f"<div class='small-box'>{datos.get('idea_visual','')}</div>", unsafe_allow_html=True)
