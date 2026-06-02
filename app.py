@@ -85,7 +85,7 @@ def wrap(texto, font, max_w):
         lineas.append(actual)
     return lineas
 
-def generar_con_ia(perfil, descripcion, tipo, historial):
+def generar_con_ia(perfil, descripcion, objetivo, historial):
     prompt = f"""
 Eres un community manager profesional para negocios pequeños de Chile.
 
@@ -120,8 +120,8 @@ Formato:
 Perfil:
 {json.dumps(perfil, ensure_ascii=False)}
 
-Tipo:
-{tipo}
+Objetivo de publicación:
+{objetivo}
 
 Quiere comunicar:
 {descripcion}
@@ -130,14 +130,13 @@ Historial reciente:
 {json.dumps(historial[-8:], ensure_ascii=False)}
 
 Reglas:
-- No inventes precios, fechas, stock ni dirección.
+- No inventes precios, fechas, stock, descuentos, eventos ni dirección.
 - Si el usuario da precio o fecha, úsalo.
-- No prometas descuentos que el usuario no dijo.
+- Usa solo servicios y material disponible del perfil.
 - Gancho visual máximo 4 palabras.
 - Subtítulo visual máximo 12 palabras.
-- El mensaje debe sonar como community manager real.
-- La dirección visual debe explicar qué foto conviene y cómo diseñar.
-- Si una selfie común no sirve para vender, dilo en idea_foto.
+- Si la foto subida no sirve, dilo en idea_foto y sugiere una alternativa fácil.
+- No recomiendes antes/después, testimonios o clientes si el perfil no dice que tiene ese material.
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -172,9 +171,11 @@ Historial:
 
 Reglas:
 - 4 publicaciones máximo.
-- No inventes descuentos, eventos ni rifas.
-- Usa los servicios reales del perfil.
-- Ideas concretas y realizables.
+- No inventes descuentos, eventos, rifas, testimonios, antes/después, fotos de clientes ni disponibilidad si el perfil no lo menciona.
+- Usa solamente servicios reales del perfil.
+- Usa solamente el material disponible indicado en el perfil.
+- Ideas concretas y realizables para un dueño ocupado.
+- Si no hay material visual específico, propone contenido fácil: servicio destacado, recordatorio de reservas, horario, beneficios, preguntas frecuentes o promoción simple.
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -218,11 +219,12 @@ def crear_imagen_base(perfil, data, foto=None):
         texto = (250,250,250)
 
     f1, f2, f3 = fuente(42), fuente(90), fuente(42, False)
-
     d.text((80, 60), perfil.get("nombre", "NEGOCIO").upper()[:28], font=f1, fill=acento)
+
     for l in wrap(data.get("gancho_visual","").upper(), f2, 900)[:3]:
         d.text((80, y), l, font=f2, fill=texto)
         y += 96
+
     for l in wrap(data.get("subtitulo_visual",""), f3, 900)[:2]:
         d.text((80, y+8), l, font=f3, fill=(220,220,220))
         y += 52
@@ -237,6 +239,7 @@ perfil_default = {
     "tono": "Cercano",
     "publico": "",
     "productos": "",
+    "material_disponible": "",
     "dias_publicacion": "Lunes, miércoles y viernes",
     "horario_preferido": "19:00",
     "whatsapp": ""
@@ -290,7 +293,20 @@ with tab_crear:
     with izq:
         st.markdown("## Crear publicación")
         st.markdown(f"<div class='card'><b>Negocio:</b> {perfil.get('nombre') or 'Sin nombre'}<br><b>Rubro:</b> {perfil.get('rubro')}<br><b>Tono:</b> {perfil.get('tono')}<br><b>Días:</b> {perfil.get('dias_publicacion')} · {perfil.get('horario_preferido')}</div>", unsafe_allow_html=True)
-        tipo = st.selectbox("Tipo de publicación", ["Promoción","Producto","Evento","Testimonio","Informativo","Recordatorio","Sorteo"])
+
+        objetivo = st.selectbox("Objetivo de la publicación", [
+            "Vender una promoción",
+            "Mostrar un producto o servicio",
+            "Avisar horario o disponibilidad",
+            "Recordar que pueden reservar",
+            "Llenar horas disponibles",
+            "Anunciar algo nuevo",
+            "Educar al cliente",
+            "Hacer una historia interactiva",
+            "Crear confianza",
+            "Otro"
+        ])
+
         descripcion = st.text_area("Qué quieres comunicar", height=150, placeholder="Ej: Cortes a $5000 solo por esta tarde.")
         foto = st.file_uploader("Sube foto del producto/local/persona", type=["jpg","jpeg","png","webp"])
         generar = st.button("GENERAR PUBLICACIÓN")
@@ -304,7 +320,7 @@ with tab_crear:
                 st.error("Escribe qué quieres comunicar.")
             else:
                 with st.spinner("Tu Community Manager Virtual está preparando la publicación..."):
-                    data = generar_con_ia(perfil, descripcion, tipo, historial)
+                    data = generar_con_ia(perfil, descripcion, objetivo, historial)
                     post = crear_imagen_base(perfil, data, foto)
 
                     buffer = io.BytesIO()
@@ -316,7 +332,7 @@ with tab_crear:
 
                     historial.append({
                         "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "tipo": tipo,
+                        "tipo": objetivo,
                         "descripcion": descripcion,
                         "dia_recomendado": data.get("dia_recomendado",""),
                         "hora_recomendada": data.get("hora_recomendada",""),
@@ -372,7 +388,8 @@ with tab_perfil:
         perfil["tono"] = st.selectbox("Tono de marca", tonos, index=tonos.index(perfil.get("tono","Cercano")) if perfil.get("tono","Cercano") in tonos else 0)
     with c2:
         perfil["publico"] = st.text_input("Público objetivo", value=perfil.get("publico",""), placeholder="Ej: hombres 18-35 de Viña")
-        perfil["productos"] = st.text_area("Qué vende / servicios principales", value=perfil.get("productos",""), height=100)
+        perfil["productos"] = st.text_area("Qué vende / servicios principales", value=perfil.get("productos",""), height=90)
+        perfil["material_disponible"] = st.text_area("Qué material tiene para publicar", value=perfil.get("material_disponible",""), height=90, placeholder="Ej: fotos del local, fotos de cortes terminados, videos cortos, fotos de productos, no tenemos antes y después")
         perfil["dias_publicacion"] = st.text_input("Días ideales para publicar", value=perfil.get("dias_publicacion","Lunes, miércoles y viernes"))
         perfil["horario_preferido"] = st.text_input("Horario preferido", value=perfil.get("horario_preferido","19:00"))
         perfil["whatsapp"] = st.text_input("WhatsApp del negocio opcional", value=perfil.get("whatsapp",""))
