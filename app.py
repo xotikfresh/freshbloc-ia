@@ -46,6 +46,27 @@ h1,h2,h3,p,label,span {color:#15151a!important;}
     margin-top:-6px;
     margin-bottom:12px;
 }
+.big-question {
+    font-size:34px;
+    font-weight:900;
+    margin-top:22px;
+    margin-bottom:10px;
+}
+.idea-card {
+    background:#fff;
+    border:1px solid #d8c6ff;
+    border-radius:24px;
+    padding:18px;
+    min-height:210px;
+    box-shadow:0 8px 24px rgba(90,50,150,.08);
+}
+.summary-box {
+    background:#ffffff;
+    border:1px solid #e3d7ff;
+    border-radius:22px;
+    padding:18px;
+    margin-bottom:14px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -265,7 +286,7 @@ Reglas:
     return data
 
 
-def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación'):
+def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación', mostrar_direccion=False):
     rubro = perfil.get("rubro", "").lower()
 
     if "barber" in rubro:
@@ -360,6 +381,21 @@ def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Pu
     # Línea/acento visual discreto
     d.rounded_rectangle((x, min(y + 28, alto_final-65), x + 180, min(y + 40, alto_final-53)), radius=8, fill=acento)
 
+    if mostrar_direccion and perfil.get("direccion"):
+        marca = perfil.get("direccion", "").strip()
+        if marca:
+            f_dir = fuente(24, True)
+            bbox = d.textbbox((0, 0), marca, font=f_dir)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            x_dir = ancho_final - tw - 55
+            y_dir = alto_final - th - 45
+            d.rounded_rectangle(
+                (x_dir - 22, y_dir - 12, x_dir + tw + 22, y_dir + th + 12),
+                radius=22,
+                fill=(255, 255, 255)
+            )
+            d.text((x_dir, y_dir), marca, font=f_dir, fill=(35, 25, 55))
+
     return img
 
 
@@ -372,7 +408,8 @@ perfil_default = {
     "material_disponible": "",
     "dias_publicacion": "Lunes, miércoles y viernes",
     "horario_preferido": "19:00",
-    "whatsapp": ""
+    "whatsapp": "",
+    "direccion": ""
 }
 
 perfil = load_json(PROFILE_PATH, perfil_default)
@@ -418,8 +455,6 @@ with tab_inicio:
             st.markdown(f"<div class='card'><b>{item.get('dia')} · {item.get('hora')}</b><br><b>{item.get('tipo')}</b>: {item.get('idea')}<br><span class='small'>{item.get('objetivo')}</span></div>", unsafe_allow_html=True)
 
 with tab_crear:
-    izq, der = st.columns([0.85,1.15], gap="large")
-
     if "crear_step" not in st.session_state:
         st.session_state["crear_step"] = 1
     if "crear_formato" not in st.session_state:
@@ -430,43 +465,36 @@ with tab_crear:
         st.session_state["descripcion_actual"] = ""
     if "ideas_sugeridas" not in st.session_state:
         st.session_state["ideas_sugeridas"] = None
+    if "mostrar_direccion" not in st.session_state:
+        st.session_state["mostrar_direccion"] = False
 
+    step = st.session_state["crear_step"]
     generar = False
     foto = None
 
-    with izq:
-        st.markdown("## Crear contenido")
+    st.markdown("## Crear contenido")
 
-        st.markdown(f"""
-        <div class='card'>
-        <b>Negocio:</b> {perfil.get('nombre') or 'Sin nombre'}<br>
-        <b>Rubro:</b> {perfil.get('rubro')}<br>
-        <b>Tono:</b> {perfil.get('tono')}
-        </div>
-        """, unsafe_allow_html=True)
-
-        step = st.session_state["crear_step"]
+    if step < 4:
         st.markdown(f"<p class='soft-note'>Paso {step} de 4</p>", unsafe_allow_html=True)
 
         if step == 1:
-            st.markdown("<div class='step-title'>¿Qué quieres crear?</div>", unsafe_allow_html=True)
+            st.markdown("<div class='big-question'>¿Qué quieres crear?</div>", unsafe_allow_html=True)
 
-            formato = st.radio(
-                "Formato",
-                ["Publicación", "Historia"],
-                horizontal=True,
-                label_visibility="collapsed",
-                index=0 if st.session_state["crear_formato"] == "Publicación" else 1
-            )
-
-            if st.button("SIGUIENTE"):
-                st.session_state["crear_formato"] = formato
-                st.session_state["crear_step"] = 2
-                st.rerun()
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("PUBLICACIÓN", use_container_width=True):
+                    st.session_state["crear_formato"] = "Publicación"
+                    st.session_state["crear_step"] = 2
+                    st.rerun()
+            with c2:
+                if st.button("HISTORIA", use_container_width=True):
+                    st.session_state["crear_formato"] = "Historia"
+                    st.session_state["crear_step"] = 2
+                    st.rerun()
 
         elif step == 2:
             formato_contenido = st.session_state["crear_formato"]
-            st.markdown("<div class='step-title'>¿Cuál es el objetivo?</div>", unsafe_allow_html=True)
+            st.markdown("<div class='big-question'>¿Cuál es el objetivo?</div>", unsafe_allow_html=True)
 
             if formato_contenido == "Historia":
                 objetivos = [
@@ -479,7 +507,6 @@ with tab_crear:
                     "Última oportunidad",
                     "Otro"
                 ]
-                ayuda = "Las historias sirven para activar a quienes ya siguen el negocio."
             else:
                 objetivos = [
                     "Vender una promoción",
@@ -492,51 +519,39 @@ with tab_crear:
                     "Crear confianza",
                     "Otro"
                 ]
-                ayuda = "Las publicaciones sirven para vender, informar o posicionar el negocio."
 
-            st.markdown(f"<p class='soft-note'>{ayuda}</p>", unsafe_allow_html=True)
+            cols = st.columns(3)
+            for i, obj in enumerate(objetivos):
+                with cols[i % 3]:
+                    if st.button(obj, key=f"obj_{i}", use_container_width=True):
+                        st.session_state["crear_objetivo"] = obj
+                        st.session_state["crear_step"] = 3
+                        st.session_state["ideas_sugeridas"] = None
+                        st.rerun()
 
-            objetivo = st.selectbox(
-                "Objetivo",
-                objetivos,
-                label_visibility="collapsed",
-                index=objetivos.index(st.session_state["crear_objetivo"]) if st.session_state["crear_objetivo"] in objetivos else 0
-            )
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-                if st.button("ATRÁS"):
-                    st.session_state["crear_step"] = 1
-                    st.rerun()
-
-            with c2:
-                if st.button("SIGUIENTE"):
-                    st.session_state["crear_objetivo"] = objetivo
-                    st.session_state["crear_step"] = 3
-                    st.session_state["ideas_sugeridas"] = None
-                    st.rerun()
+            if st.button("ATRÁS", key="back_step_2"):
+                st.session_state["crear_step"] = 1
+                st.rerun()
 
         elif step == 3:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
 
-            st.markdown("<div class='step-title'>¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
-            st.markdown("<p class='soft-note'>Escribe una idea o deja que el Community Manager Virtual te proponga opciones.</p>", unsafe_allow_html=True)
+            st.markdown("<div class='big-question'>¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Escribe una idea o pídele al sistema que piense por ti.</p>", unsafe_allow_html=True)
 
             descripcion = st.text_area(
                 "Mensaje",
-                height=115,
+                height=120,
                 max_chars=260,
                 placeholder="Ej: Quiero avisar que hoy quedan horas disponibles para reservar.",
                 key="descripcion_actual",
                 label_visibility="collapsed"
             )
 
-            c_ideas, c_next = st.columns([1,1])
-
-            with c_ideas:
-                if st.button("NO SÉ QUÉ PUBLICAR"):
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("NO SÉ QUÉ PUBLICAR", use_container_width=True):
                     if not perfil.get("nombre"):
                         st.error("Primero guarda el perfil del negocio.")
                     else:
@@ -549,8 +564,8 @@ with tab_crear:
                             )
                         st.rerun()
 
-            with c_next:
-                if st.button("USAR MI TEXTO"):
+            with b2:
+                if st.button("USAR MI TEXTO", use_container_width=True):
                     if not st.session_state["descripcion_actual"].strip():
                         st.error("Escribe algo o pide ideas.")
                     else:
@@ -562,7 +577,6 @@ with tab_crear:
                 ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
 
                 cols = st.columns(4)
-
                 for i, idea in enumerate(ideas[:4]):
                     titulo = idea.get("titulo", f"Idea {i+1}")
                     desc = idea.get("descripcion", "")
@@ -570,29 +584,40 @@ with tab_crear:
 
                     with cols[i]:
                         st.markdown(f"""
-                        <div class='card' style='min-height:170px;'>
+                        <div class='idea-card'>
                         <b>{titulo}</b><br><br>
-                        <span class='small'>{razon}</span>
+                        <span class='small'>{razon}</span><br><br>
+                        {desc[:120]}...
                         </div>
                         """, unsafe_allow_html=True)
 
-                        if st.button(titulo[:28], key=f"idea_click_{i}"):
+                        if st.button("ELEGIR", key=f"idea_click_{i}", use_container_width=True):
                             st.session_state["descripcion_actual"] = desc
                             st.session_state["crear_step"] = 4
                             st.rerun()
 
-            if st.button("ATRÁS", key="atras_3"):
+            if st.button("ATRÁS", key="back_step_3"):
                 st.session_state["crear_step"] = 2
                 st.rerun()
 
-        elif step == 4:
+    else:
+        izq, der = st.columns([0.8, 1.2], gap="large")
+
+        with izq:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
             descripcion = st.session_state.get("descripcion_actual", "")
 
+            st.markdown("## Resumen")
+            st.markdown(f"""
+            <div class='summary-box'>
+            <b>Formato:</b> {formato_contenido}<br>
+            <b>Objetivo:</b> {objetivo}<br>
+            <b>Idea:</b> {descripcion}
+            </div>
+            """, unsafe_allow_html=True)
+
             st.markdown("<div class='step-title'>Sube una foto opcional</div>", unsafe_allow_html=True)
-            st.markdown(f"<p class='soft-note'><b>Idea elegida:</b> {descripcion}</p>", unsafe_allow_html=True)
-            st.markdown("<p class='soft-note'>Puedes generar igual sin foto, pero una imagen real ayuda más.</p>", unsafe_allow_html=True)
 
             foto = st.file_uploader(
                 "Foto",
@@ -601,121 +626,122 @@ with tab_crear:
                 key="foto_crear"
             )
 
-            c1, c2 = st.columns(2)
+            mostrar_dir = st.checkbox(
+                "Agregar dirección como marca de agua",
+                value=st.session_state.get("mostrar_direccion", False)
+            )
+            st.session_state["mostrar_direccion"] = mostrar_dir
 
+            c1, c2 = st.columns(2)
             with c1:
-                if st.button("ATRÁS", key="atras_4"):
+                if st.button("ATRÁS", key="atras_4", use_container_width=True):
                     st.session_state["crear_step"] = 3
                     st.rerun()
-
             with c2:
-                generar = st.button("GENERAR CONTENIDO")
+                generar = st.button("GENERAR", use_container_width=True)
 
-    with der:
-        st.markdown("## Resultado")
+        with der:
+            st.markdown("## Resultado")
 
-        if st.session_state.get("crear_step") == 4:
-            formato_contenido = st.session_state["crear_formato"]
-            objetivo = st.session_state["crear_objetivo"]
-            descripcion = st.session_state.get("descripcion_actual", "")
-        else:
-            generar = False
+            if generar:
+                if not perfil.get("nombre"):
+                    st.error("Primero guarda el perfil del negocio.")
+                elif not descripcion.strip():
+                    st.error("Escribe qué quieres comunicar.")
+                else:
+                    with st.spinner("Tu Community Manager Virtual está preparando el contenido..."):
+                        data = generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial)
+                        st.session_state["design_variant"] = 0
+                        st.session_state["last_foto"] = foto
+                        st.session_state["last_formato"] = formato_contenido
+                        st.session_state["last_mostrar_direccion"] = mostrar_dir
 
-        if generar:
-            if not perfil.get("nombre"):
-                st.error("Primero guarda el perfil del negocio.")
-            elif not descripcion.strip():
-                st.error("Escribe qué quieres comunicar.")
-            else:
-                with st.spinner("Tu Community Manager Virtual está preparando el contenido..."):
-                    data = generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial)
-                    st.session_state['design_variant'] = 0
-                    st.session_state['last_foto'] = foto
-                    st.session_state['last_formato'] = formato_contenido
+                        post = crear_imagen_base(
+                            perfil,
+                            data,
+                            foto,
+                            st.session_state["design_variant"],
+                            formato_contenido,
+                            mostrar_dir
+                        )
 
-                    post = crear_imagen_base(
-                        perfil,
-                        data,
-                        foto,
-                        st.session_state['design_variant'],
-                        formato_contenido
+                        buffer = io.BytesIO()
+                        post.save(buffer, format="PNG")
+                        buffer.seek(0)
+
+                        st.session_state["post_buffer"] = buffer.getvalue()
+                        st.session_state["data"] = data
+
+                        historial.append({
+                            "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "formato": formato_contenido,
+                            "tipo": objetivo,
+                            "descripcion": descripcion,
+                            "dia_recomendado": data.get("dia_recomendado",""),
+                            "hora_recomendada": data.get("hora_recomendada",""),
+                            "gancho": data.get("gancho_visual","")
+                        })
+                        save_json(HISTORY_PATH, historial)
+
+            if "post_buffer" in st.session_state:
+                cbtn1, cbtn2 = st.columns(2)
+
+                with cbtn1:
+                    if st.button("REHACER DISEÑO", use_container_width=True):
+                        st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
+                        post = crear_imagen_base(
+                            perfil,
+                            st.session_state["data"],
+                            st.session_state.get("last_foto"),
+                            st.session_state["design_variant"],
+                            st.session_state.get("last_formato", "Publicación"),
+                            st.session_state.get("last_mostrar_direccion", False)
+                        )
+                        buffer = io.BytesIO()
+                        post.save(buffer, format="PNG")
+                        buffer.seek(0)
+                        st.session_state["post_buffer"] = buffer.getvalue()
+
+                with cbtn2:
+                    st.download_button(
+                        "DESCARGAR",
+                        data=st.session_state["post_buffer"],
+                        file_name=f"contenido_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        use_container_width=True
                     )
 
-                    buffer = io.BytesIO()
-                    post.save(buffer, format="PNG")
-                    buffer.seek(0)
+                st.image(st.session_state["post_buffer"], use_container_width=True)
 
-                    st.session_state["post_buffer"] = buffer.getvalue()
-                    st.session_state["data"] = data
+            if "data" in st.session_state:
+                data = st.session_state["data"]
+                visual = data.get("direccion_visual", {})
 
-                    historial.append({
-                        "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "formato": formato_contenido,
-                        "tipo": objetivo,
-                        "descripcion": descripcion,
-                        "dia_recomendado": data.get("dia_recomendado",""),
-                        "hora_recomendada": data.get("hora_recomendada",""),
-                        "gancho": data.get("gancho_visual","")
-                    })
-                    save_json(HISTORY_PATH, historial)
+                st.markdown("### Texto principal")
+                if st.session_state.get("last_formato") == "Historia":
+                    st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
 
-        if "post_buffer" in st.session_state:
-            cbtn1, cbtn2 = st.columns(2)
+                st.markdown("### WhatsApp")
+                st.markdown(f"<div class='card'>{data.get('mensaje_whatsapp','')}</div>", unsafe_allow_html=True)
 
-            with cbtn1:
-                if st.button("REHACER DISEÑO"):
-                    st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
-                    post = crear_imagen_base(
-                        perfil,
-                        st.session_state["data"],
-                        st.session_state.get("last_foto"),
-                        st.session_state["design_variant"],
-                        st.session_state.get("last_formato", "Publicación")
-                    )
-                    buffer = io.BytesIO()
-                    post.save(buffer, format="PNG")
-                    buffer.seek(0)
-                    st.session_state["post_buffer"] = buffer.getvalue()
+                st.markdown("### Dirección visual sugerida")
+                st.markdown(f"""
+                <div class="purple">
+                <b>Foto ideal:</b> {visual.get('foto_ideal','')}<br>
+                <b>Layout:</b> {visual.get('tipo_layout','')}<br>
+                <b>Texto:</b> {visual.get('texto_en_imagen','')}<br>
+                <b>Evitar:</b> {visual.get('que_evitar','')}<br>
+                <b>Idea foto:</b> {data.get('idea_foto','')}
+                </div>
+                """, unsafe_allow_html=True)
 
-            with cbtn2:
-                st.download_button(
-                    "DESCARGAR",
-                    data=st.session_state["post_buffer"],
-                    file_name=f"contenido_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                    mime="image/png"
-                )
+                st.markdown("### Cuándo subirlo")
+                st.markdown(f"<div class='card'><b>{data.get('dia_recomendado','')}</b> a las <b>{data.get('hora_recomendada','')}</b><br>{data.get('motivo_horario','')}</div>", unsafe_allow_html=True)
 
-            st.image(st.session_state["post_buffer"], use_container_width=True)
-
-        if "data" in st.session_state:
-            data = st.session_state["data"]
-            visual = data.get("direccion_visual", {})
-
-            st.markdown("### Texto principal")
-            if st.session_state.get("last_formato") == "Historia":
-                st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
-
-            st.markdown("### WhatsApp")
-            st.markdown(f"<div class='card'>{data.get('mensaje_whatsapp','')}</div>", unsafe_allow_html=True)
-
-            st.markdown("### Dirección visual sugerida")
-            st.markdown(f"""
-            <div class="purple">
-            <b>Foto ideal:</b> {visual.get('foto_ideal','')}<br>
-            <b>Layout:</b> {visual.get('tipo_layout','')}<br>
-            <b>Texto:</b> {visual.get('texto_en_imagen','')}<br>
-            <b>Evitar:</b> {visual.get('que_evitar','')}<br>
-            <b>Idea foto:</b> {data.get('idea_foto','')}
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("### Cuándo subirlo")
-            st.markdown(f"<div class='card'><b>{data.get('dia_recomendado','')}</b> a las <b>{data.get('hora_recomendada','')}</b><br>{data.get('motivo_horario','')}</div>", unsafe_allow_html=True)
-
-            st.markdown("### Hashtags")
-            st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
+                st.markdown("### Hashtags")
+                st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
 
 
 with tab_perfil:
@@ -734,6 +760,7 @@ with tab_perfil:
         perfil["dias_publicacion"] = st.text_input("Días ideales para publicar", value=perfil.get("dias_publicacion","Lunes, miércoles y viernes"))
         perfil["horario_preferido"] = st.text_input("Horario preferido", value=perfil.get("horario_preferido","19:00"))
         perfil["whatsapp"] = st.text_input("WhatsApp del negocio opcional", value=perfil.get("whatsapp",""))
+        perfil["direccion"] = st.text_input("Dirección del negocio opcional", value=perfil.get("direccion",""), placeholder="Ej: 5 Norte 123, Viña del Mar")
     if st.button("GUARDAR PERFIL"):
         save_json(PROFILE_PATH, perfil)
         st.success("Perfil guardado.")
