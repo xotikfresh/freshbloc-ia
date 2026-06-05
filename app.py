@@ -234,6 +234,7 @@ REGLAS DURAS:
 - No inventes antes/después.
 - Si el usuario dio precio, producto, horario o condición, úsalo exactamente.
 - Si falta un dato, no lo inventes: redacta de forma útil usando solo lo disponible.
+- Nunca digas "precio no disponible", "fecha no disponible" ni "stock no disponible". Omite ese dato.
 - No uses el nombre del negocio como gancho visual.
 - No pongas el nombre del negocio dentro de la imagen.
 - Usa lenguaje chileno natural, claro y profesional.
@@ -257,6 +258,7 @@ SI EL OBJETIVO ES "Vender una promoción":
   hasta cuándo dura si existe,
   cómo pedir/reservar.
 - Si no hay precio, no inventes precio.
+- Nunca escribas "precio no disponible". Si no hay precio, simplemente no menciones precio.
 - Si no hay vigencia, no inventes urgencia falsa.
 
 SI EL FORMATO ES "Historia":
@@ -759,8 +761,23 @@ def render_creador():
                     with cols[i]:
                         texto_boton = f"{titulo}\n\n{razon}\n\n{desc[:140]}..."
                         if st.button(texto_boton, key=f"idea_click_{i}", use_container_width=True):
+                            promo_extra = []
+                            if objetivo == "Vender una promoción":
+                                if st.session_state.get("promo_producto"):
+                                    promo_extra.append(f"Producto/servicio en promoción: {st.session_state.get('promo_producto')}")
+                                if st.session_state.get("promo_precio"):
+                                    promo_extra.append(f"Precio real: {st.session_state.get('promo_precio')}")
+                                if st.session_state.get("promo_vigencia"):
+                                    promo_extra.append(f"Vigencia: {st.session_state.get('promo_vigencia')}")
+                                if st.session_state.get("promo_condicion"):
+                                    promo_extra.append(f"Condición: {st.session_state.get('promo_condicion')}")
+
+                            final_desc = desc
+                            if promo_extra:
+                                final_desc = final_desc + "\n" + "\n".join(promo_extra)
+
                             st.session_state["idea_elegida_desc"] = desc
-                            st.session_state["descripcion_final"] = desc
+                            st.session_state["descripcion_final"] = final_desc
                             st.session_state["crear_step"] = 4
                             st.rerun()
 
