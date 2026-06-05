@@ -27,7 +27,30 @@ h1,h2,h3,p,label,span {color:#15151a!important;}
 .purple * {color:white!important;}
 .stTextInput input,.stTextArea textarea {background:#fff!important;color:#15151a!important;border:1px solid #cdb8ff!important;border-radius:14px!important;font-size:17px!important;}
 .stSelectbox div[data-baseweb="select"] > div {background:#fff!important;border:1px solid #cdb8ff!important;border-radius:14px!important;}
-.stButton>button,.stDownloadButton>button {background:#913CFF!important;color:white!important;border:none!important;border-radius:16px!important;font-weight:900!important;padding:.9rem 1.2rem!important;}
+.stButton>button,.stDownloadButton>button {
+    background:#913CFF!important;
+    color:white!important;
+    border:none!important;
+    border-radius:16px!important;
+    font-weight:900!important;
+    padding:.9rem 1.2rem!important;
+}
+.stButton>button *,.stDownloadButton>button * {
+    color:white!important;
+}
+.idea-card {
+    background:#fff;
+    border:1px solid #d8c6ff;
+    border-radius:24px;
+    padding:22px;
+    min-height:260px;
+    box-shadow:0 8px 24px rgba(90,50,150,.08);
+    cursor:pointer;
+}
+.idea-card b {
+    font-size:18px;
+}
+
 [data-testid="stFileUploader"] {background:#fff;border:1px dashed #b894ff;border-radius:18px;padding:14px;}
 .small {color:#555!important;font-size:15px;}
 [data-testid="stTextAreaCharCounter"] {
@@ -52,14 +75,7 @@ h1,h2,h3,p,label,span {color:#15151a!important;}
     margin-top:22px;
     margin-bottom:10px;
 }
-.idea-card {
-    background:#fff;
-    border:1px solid #d8c6ff;
-    border-radius:24px;
-    padding:18px;
-    min-height:210px;
-    box-shadow:0 8px 24px rgba(90,50,150,.08);
-}
+
 .summary-box {
     background:#ffffff;
     border:1px solid #e3d7ff;
@@ -574,25 +590,20 @@ with tab_crear:
 
             if st.session_state.get("ideas_sugeridas"):
                 st.markdown("<div class='step-title'>Elige una idea</div>", unsafe_allow_html=True)
-                ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
+                st.markdown("<p class='soft-note'>Haz click en una tarjeta completa para continuar.</p>", unsafe_allow_html=True)
 
+                ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
                 cols = st.columns(4)
+
                 for i, idea in enumerate(ideas[:4]):
                     titulo = idea.get("titulo", f"Idea {i+1}")
                     desc = idea.get("descripcion", "")
                     razon = idea.get("por_que_funciona", "")
 
                     with cols[i]:
-                        st.markdown(f"""
-                        <div class='idea-card'>
-                        <b>{titulo}</b><br><br>
-                        <span class='small'>{razon}</span><br><br>
-                        {desc[:120]}...
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        if st.button("ELEGIR", key=f"idea_click_{i}", use_container_width=True):
-                            st.session_state["descripcion_actual"] = desc
+                        texto_boton = f"{titulo}\n\n{razon}\n\n{desc[:140]}..."
+                        if st.button(texto_boton, key=f"idea_click_{i}", use_container_width=True):
+                            st.session_state["idea_elegida_desc"] = desc
                             st.session_state["crear_step"] = 4
                             st.rerun()
 
@@ -606,7 +617,7 @@ with tab_crear:
         with izq:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
-            descripcion = st.session_state.get("descripcion_actual", "")
+            descripcion = st.session_state.get("idea_elegida_desc") or st.session_state.get("descripcion_actual", "")
 
             st.markdown("## Resumen")
             st.markdown(f"""
@@ -635,6 +646,9 @@ with tab_crear:
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("ATRÁS", key="atras_4", use_container_width=True):
+                    if st.session_state.get("idea_elegida_desc"):
+                        st.session_state["descripcion_actual"] = st.session_state["idea_elegida_desc"]
+                        st.session_state["idea_elegida_desc"] = ""
                     st.session_state["crear_step"] = 3
                     st.rerun()
             with c2:
