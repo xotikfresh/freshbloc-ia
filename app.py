@@ -474,98 +474,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_inicio, tab_crear, tab_perfil, tab_historial = st.tabs(["Inicio", "Crear publicación", "Perfil del negocio", "Calendario / historial"])
-
-with tab_inicio:
-    st.markdown("## Inicio")
-
-    if perfil.get("nombre"):
-        negocio = perfil.get("nombre")
-        rubro = perfil.get("rubro")
-        tono = perfil.get("tono")
-        dias = perfil.get("dias_publicacion")
-        hora = perfil.get("horario_preferido")
-
-        st.markdown(f"""
-        <div class="home-main">
-        <h2>Hola, {negocio}</h2>
-        <p class="small">Dago está listo para ayudarte a crear contenido para tu {rubro.lower()} con tono {tono.lower()}.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="home-main">
-        <h2>Configura tu negocio</h2>
-        <p class="small">Completa el perfil para que Dago pueda crear ideas, publicaciones e historias personalizadas.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    cta1, cta2 = st.columns([1,1])
-
-    with cta1:
-        if st.button("CREAR CONTENIDO AHORA", use_container_width=True):
-            st.session_state["crear_step"] = 1
-            st.session_state["ideas_sugeridas"] = None
-            st.session_state["descripcion_actual"] = ""
-            st.success("Listo. Entra a la pestaña Crear publicación para comenzar.")
-
-    with cta2:
-        if st.button("GENERAR PLAN SEMANAL", use_container_width=True):
-            if not perfil.get("nombre"):
-                st.error("Primero guarda el perfil.")
-            else:
-                with st.spinner("Preparando plan semanal..."):
-                    st.session_state["plan"] = generar_plan_semanal(perfil, historial)
-
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown(f"""
-        <div class="home-card">
-        <h3>Próxima idea</h3>
-        <p>{perfil.get('dias_publicacion','Define tus días')}</p>
-        <b>{perfil.get('horario_preferido','19:00')}</b>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c2:
-        st.markdown(f"""
-        <div class="home-card">
-        <h3>Contenido creado</h3>
-        <p><b>{len(historial)}</b> piezas guardadas</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c3:
-        ultima = historial[-1]["gancho"] if historial else "Aún no hay ideas"
-        st.markdown(f"""
-        <div class="home-card">
-        <h3>Última idea</h3>
-        <p>{ultima}</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    if "plan" in st.session_state:
-        plan = st.session_state["plan"]
-        st.markdown("## Plan recomendado")
-        st.markdown(f"""
-        <div class="home-main">
-        <b>{plan.get('resumen','')}</b><br>
-        <span class="small">{plan.get('recomendacion_general','')}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        for item in plan.get("plan", []):
-            st.markdown(f"""
-            <div class="home-card">
-            <b>{item.get('dia')} · {item.get('hora')}</b><br>
-            <b>{item.get('tipo')}</b>: {item.get('idea')}<br>
-            <span class="small">{item.get('objetivo')}</span>
-            </div>
-            """, unsafe_allow_html=True)
 
 
-with tab_crear:
+def render_creador():
     if "crear_step" not in st.session_state:
         st.session_state["crear_step"] = 1
     if "crear_formato" not in st.session_state:
@@ -583,7 +494,7 @@ with tab_crear:
     generar = False
     foto = None
 
-    st.markdown("## Crear contenido")
+    st.markdown("## Crear contenido con Dago")
 
     if step < 4:
         st.markdown(f"<p class='soft-note'>Paso {step} de 4</p>", unsafe_allow_html=True)
@@ -851,6 +762,111 @@ with tab_crear:
 
                 st.markdown("### Hashtags")
                 st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
+
+
+
+tab_inicio, tab_perfil, tab_historial = st.tabs(["Inicio", "Perfil del negocio", "Calendario / historial"])
+
+with tab_inicio:
+    if "mostrar_creador" not in st.session_state:
+        st.session_state["mostrar_creador"] = False
+
+    if st.session_state["mostrar_creador"]:
+        ctop1, ctop2 = st.columns([0.22, 0.78])
+        with ctop1:
+            if st.button("← VOLVER", use_container_width=True):
+                st.session_state["mostrar_creador"] = False
+                st.rerun()
+
+        render_creador()
+
+    else:
+        st.markdown("## Inicio")
+
+        if perfil.get("nombre"):
+            negocio = perfil.get("nombre")
+            rubro = perfil.get("rubro")
+            tono = perfil.get("tono")
+
+            st.markdown(f"""
+            <div class="home-main">
+            <h2>Hola, {negocio}</h2>
+            <p class="small">Dago está listo para crear contenido para tu {rubro.lower()} con tono {tono.lower()}.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="home-main">
+            <h2>Configura tu negocio</h2>
+            <p class="small">Completa el perfil para que Dago pueda crear ideas, publicaciones e historias personalizadas.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        cta1, cta2 = st.columns([1,1])
+
+        with cta1:
+            if st.button("CREAR CONTENIDO AHORA", use_container_width=True):
+                st.session_state["mostrar_creador"] = True
+                st.session_state["crear_step"] = 1
+                st.session_state["ideas_sugeridas"] = None
+                st.session_state["descripcion_actual"] = ""
+                st.session_state["idea_elegida_desc"] = ""
+                st.rerun()
+
+        with cta2:
+            if st.button("GENERAR PLAN SEMANAL", use_container_width=True):
+                if not perfil.get("nombre"):
+                    st.error("Primero guarda el perfil.")
+                else:
+                    with st.spinner("Preparando plan semanal..."):
+                        st.session_state["plan"] = generar_plan_semanal(perfil, historial)
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.markdown(f"""
+            <div class="home-card">
+            <h3>Próxima idea</h3>
+            <p>{perfil.get('dias_publicacion','Define tus días')}</p>
+            <b>{perfil.get('horario_preferido','19:00')}</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c2:
+            st.markdown(f"""
+            <div class="home-card">
+            <h3>Contenido creado</h3>
+            <p><b>{len(historial)}</b> piezas guardadas</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with c3:
+            ultima = historial[-1]["gancho"] if historial else "Aún no hay ideas"
+            st.markdown(f"""
+            <div class="home-card">
+            <h3>Última idea</h3>
+            <p>{ultima}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if "plan" in st.session_state:
+            plan = st.session_state["plan"]
+            st.markdown("## Plan recomendado")
+            st.markdown(f"""
+            <div class="home-main">
+            <b>{plan.get('resumen','')}</b><br>
+            <span class="small">{plan.get('recomendacion_general','')}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for item in plan.get("plan", []):
+                st.markdown(f"""
+                <div class="home-card">
+                <b>{item.get('dia')} · {item.get('hora')}</b><br>
+                <b>{item.get('tipo')}</b>: {item.get('idea')}<br>
+                <span class="small">{item.get('objetivo')}</span>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 with tab_perfil:
