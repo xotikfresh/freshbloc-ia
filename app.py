@@ -214,6 +214,57 @@ Reglas:
 
 
 
+def generar_ideas_con_ia(perfil, formato_contenido, objetivo, historial):
+    prompt = f"""
+Eres un community manager creativo para negocios pequeños de Chile.
+
+El usuario no sabe qué publicar. Tu trabajo es quitarle el bloqueo creativo.
+
+Devuelve SOLO JSON válido.
+
+Formato:
+{{
+ "ideas":[
+   {{"titulo":"","descripcion":"","por_que_funciona":""}},
+   {{"titulo":"","descripcion":"","por_que_funciona":""}},
+   {{"titulo":"","descripcion":"","por_que_funciona":""}},
+   {{"titulo":"","descripcion":"","por_que_funciona":""}}
+ ]
+}}
+
+Perfil del negocio:
+{json.dumps(perfil, ensure_ascii=False)}
+
+Formato:
+{formato_contenido}
+
+Objetivo:
+{objetivo}
+
+Historial reciente:
+{json.dumps(historial[-8:], ensure_ascii=False)}
+
+Reglas:
+- Entrega 4 ideas concretas y distintas.
+- No inventes descuentos, eventos, stock, testimonios ni antes/después si el perfil no lo menciona.
+- Usa solo servicios reales y material disponible del perfil.
+- Si es Historia, prioriza interacción, respuestas, encuestas, disponibilidad o recordatorios.
+- Si es Publicación, prioriza venta, servicio destacado, confianza o educación.
+- Las descripciones deben poder usarse directamente como mensaje para generar contenido.
+- No uses ideas genéricas tipo "publica algo llamativo".
+"""
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.55,
+        response_format={"type": "json_object"}
+    )
+    data = json.loads(r.choices[0].message.content)
+    if "ideas" not in data or not isinstance(data["ideas"], list):
+        data["ideas"] = []
+    return data
+
+
 def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación'):
     rubro = perfil.get("rubro", "").lower()
 
@@ -369,6 +420,15 @@ with tab_inicio:
 with tab_crear:
     izq, der = st.columns([0.85,1.15], gap="large")
 
+    if "crear_step" not in st.session_state:
+        st.session_state["crear_step"] = 1
+    if "crear_formato" not in st.session_state:
+        st.session_state["crear_formato"] = "Publicación"
+    if "crear_objetivo" not in st.session_state:
+        st.session_state["crear_objetivo"] = ""
+    if "descripcion_actual" not in st.session_state:
+        st.session_state["descripcion_actual"] = ""
+
     with izq:
         st.markdown("## Crear contenido")
 
@@ -380,72 +440,161 @@ with tab_crear:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div class='step-title'>1. ¿Qué quieres crear?</div>", unsafe_allow_html=True)
-        formato_contenido = st.radio(
-            "Formato",
-            ["Publicación", "Historia"],
-            horizontal=True,
-            label_visibility="collapsed"
-        )
+        step = st.session_state["crear_step"]
+        st.markdown(f"<p class='soft-note'>Paso {step} de 4</p>", unsafe_allow_html=True)
 
-        st.markdown("<div class='step-title'>2. ¿Cuál es el objetivo?</div>", unsafe_allow_html=True)
+        if step == 1:
+            st.markdown("<div class='step-title'>¿Qué quieres crear?</div>", unsafe_allow_html=True)
+            formato = st.radio(
+                "Formato",
+                ["Publicación", "Historia"],
+                horizontal=True,
+                label_visibility="collapsed",
+                index=0 if st.session_state["crear_formato"] == "Publicación" else 1
+            )
 
-        if formato_contenido == "Historia":
-            objetivos = [
-                "Mantener activa la cuenta",
-                "Hacer una encuesta",
-                "Avisar disponibilidad",
-                "Recordar reservas",
-                "Mostrar algo rápido",
-                "Generar interacción",
-                "Última oportunidad",
-                "Otro"
-            ]
-            placeholder = "Ej: quedan pocas horas disponibles para hoy, quiero que la gente responda por interno."
-            ayuda = "Las historias sirven para activar a quienes ya siguen el negocio."
+            if st.button("SIGUIENTE"):
+                st.session_state["crear_formato"] = formato
+                st.session_state["crear_step"] = 2
+                st.rerun()
+
+        elif step == 2:
+            formato_contenido = st.session_state["crear_formato"]
+            st.markdown("<div class='step-title'>¿Cuál es el objetivo?</div>", unsafe_allow_html=True)
+
+            if formato_contenido == "Historia":
+                objetivos = [
+                    "Mantener activa la cuenta",
+                    "Hacer una encuesta",
+                    "Avisar disponibilidad",
+                    "Recordar reservas",
+                    "Mostrar algo rápido",
+                    "Generar interacción",
+                    "Última oportunidad",
+                    "Otro"
+                ]
+                ayuda = "Las historias sirven para activar a quienes ya siguen el negocio."
+            else:
+                objetivos = [
+                    "Vender una promoción",
+                    "Mostrar un producto o servicio",
+                    "Avisar horario o disponibilidad",
+                    "Recordar que pueden reservar",
+                    "Llenar horas disponibles",
+                    "Anunciar algo nuevo",
+                    "Educar al cliente",
+                    "Crear confianza",
+                    "Otro"
+                ]
+                ayuda = "Las publicaciones sirven para vender, informar o posicionar el negocio."
+
+            st.markdown(f"<p class='soft-note'>{ayuda}</p>", unsafe_allow_html=True)
+            objetivo = st.selectbox("Objetivo", objetivos, label_visibility="collapsed")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("ATRÁS"):
+                    st.session_state["crear_step"] = 1
+                    st.rerun()
+            with c2:
+                if st.button("SIGUIENTE"):
+                    st.session_state["crear_objetivo"] = objetivo
+                    st.session_state["crear_step"] = 3
+                    st.rerun()
+
+        elif step == 3:
+            formato_contenido = st.session_state["crear_formato"]
+            objetivo = st.session_state["crear_objetivo"]
+
+            st.markdown("<div class='step-title'>¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Puedes escribir tu idea o pedirle ideas al Community Manager Virtual.</p>", unsafe_allow_html=True)
+
+            if st.button("DAME IDEAS"):
+                if not perfil.get("nombre"):
+                    st.error("Primero guarda el perfil del negocio.")
+                else:
+                    with st.spinner("Buscando ideas para este negocio..."):
+                        st.session_state["ideas_sugeridas"] = generar_ideas_con_ia(
+                            perfil,
+                            formato_contenido,
+                            objetivo,
+                            historial
+                        )
+
+            if "ideas_sugeridas" in st.session_state:
+                ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
+                for i, idea in enumerate(ideas[:4]):
+                    titulo = idea.get("titulo", f"Idea {i+1}")
+                    desc = idea.get("descripcion", "")
+                    razon = idea.get("por_que_funciona", "")
+
+                    st.markdown(f"""
+                    <div class='card'>
+                    <b>{titulo}</b><br>
+                    <span class='small'>{razon}</span><br><br>
+                    {desc}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if st.button(f"USAR IDEA {i+1}", key=f"usar_idea_{i}"):
+                        st.session_state["descripcion_actual"] = desc
+                        st.rerun()
+
+            descripcion = st.text_area(
+                "Mensaje",
+                height=130,
+                max_chars=260,
+                placeholder="Ej: Quiero avisar que hoy quedan horas disponibles para reservar.",
+                key="descripcion_actual",
+                label_visibility="collapsed"
+            )
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("ATRÁS", key="atras_3"):
+                    st.session_state["crear_step"] = 2
+                    st.rerun()
+            with c2:
+                if st.button("SIGUIENTE", key="sig_3"):
+                    if not st.session_state["descripcion_actual"].strip():
+                        st.error("Escribe algo o elige una idea.")
+                    else:
+                        st.session_state["crear_step"] = 4
+                        st.rerun()
+
+        elif step == 4:
+            formato_contenido = st.session_state["crear_formato"]
+            objetivo = st.session_state["crear_objetivo"]
+            descripcion = st.session_state["descripcion_actual"]
+
+            st.markdown("<div class='step-title'>Sube una foto opcional</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Puedes generar igual sin foto, pero una imagen real ayuda más.</p>", unsafe_allow_html=True)
+
+            foto = st.file_uploader(
+                "Foto",
+                type=["jpg","jpeg","png","webp"],
+                label_visibility="collapsed"
+            )
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("ATRÁS", key="atras_4"):
+                    st.session_state["crear_step"] = 3
+                    st.rerun()
+            with c2:
+                generar = st.button("GENERAR CONTENIDO")
         else:
-            objetivos = [
-                "Vender una promoción",
-                "Mostrar un producto o servicio",
-                "Avisar horario o disponibilidad",
-                "Recordar que pueden reservar",
-                "Llenar horas disponibles",
-                "Anunciar algo nuevo",
-                "Educar al cliente",
-                "Crear confianza",
-                "Otro"
-            ]
-            placeholder = "Ej: Cortes a $5000 solo por esta tarde."
-            ayuda = "Las publicaciones sirven para vender, informar o posicionar el negocio."
-
-        st.markdown(f"<p class='soft-note'>{ayuda}</p>", unsafe_allow_html=True)
-
-        objetivo = st.selectbox(
-            "Objetivo",
-            objetivos,
-            label_visibility="collapsed"
-        )
-
-        st.markdown("<div class='step-title'>3. ¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
-        descripcion = st.text_area(
-            "Mensaje",
-            height=130,
-            max_chars=260,
-            placeholder=placeholder,
-            label_visibility="collapsed"
-        )
-
-        st.markdown("<div class='step-title'>4. Sube una foto opcional</div>", unsafe_allow_html=True)
-        foto = st.file_uploader(
-            "Foto",
-            type=["jpg","jpeg","png","webp"],
-            label_visibility="collapsed"
-        )
-
-        generar = st.button("GENERAR CONTENIDO")
+            generar = False
 
     with der:
         st.markdown("## Resultado")
+
+        if st.session_state.get("crear_step") == 4:
+            formato_contenido = st.session_state["crear_formato"]
+            objetivo = st.session_state["crear_objetivo"]
+            descripcion = st.session_state["descripcion_actual"]
+        else:
+            generar = False
 
         if generar:
             if not perfil.get("nombre"):
@@ -477,6 +626,11 @@ with tab_crear:
                         "gancho": data.get("gancho_visual","")
                     })
                     save_json(HISTORY_PATH, historial)
+
+                    st.session_state["crear_step"] = 1
+                    st.session_state["descripcion_actual"] = ""
+                    if "ideas_sugeridas" in st.session_state:
+                        del st.session_state["ideas_sugeridas"]
 
         if "post_buffer" in st.session_state:
             cbtn1, cbtn2 = st.columns(2)
