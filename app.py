@@ -428,6 +428,11 @@ with tab_crear:
         st.session_state["crear_objetivo"] = ""
     if "descripcion_actual" not in st.session_state:
         st.session_state["descripcion_actual"] = ""
+    if "ideas_sugeridas" not in st.session_state:
+        st.session_state["ideas_sugeridas"] = None
+
+    generar = False
+    foto = None
 
     with izq:
         st.markdown("## Crear contenido")
@@ -445,6 +450,7 @@ with tab_crear:
 
         if step == 1:
             st.markdown("<div class='step-title'>¿Qué quieres crear?</div>", unsafe_allow_html=True)
+
             formato = st.radio(
                 "Formato",
                 ["Publicación", "Historia"],
@@ -489,17 +495,26 @@ with tab_crear:
                 ayuda = "Las publicaciones sirven para vender, informar o posicionar el negocio."
 
             st.markdown(f"<p class='soft-note'>{ayuda}</p>", unsafe_allow_html=True)
-            objetivo = st.selectbox("Objetivo", objetivos, label_visibility="collapsed")
+
+            objetivo = st.selectbox(
+                "Objetivo",
+                objetivos,
+                label_visibility="collapsed",
+                index=objetivos.index(st.session_state["crear_objetivo"]) if st.session_state["crear_objetivo"] in objetivos else 0
+            )
 
             c1, c2 = st.columns(2)
+
             with c1:
                 if st.button("ATRÁS"):
                     st.session_state["crear_step"] = 1
                     st.rerun()
+
             with c2:
                 if st.button("SIGUIENTE"):
                     st.session_state["crear_objetivo"] = objetivo
                     st.session_state["crear_step"] = 3
+                    st.session_state["ideas_sugeridas"] = None
                     st.rerun()
 
         elif step == 3:
@@ -507,84 +522,94 @@ with tab_crear:
             objetivo = st.session_state["crear_objetivo"]
 
             st.markdown("<div class='step-title'>¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
-            st.markdown("<p class='soft-note'>Puedes escribir tu idea o pedirle ideas al Community Manager Virtual.</p>", unsafe_allow_html=True)
-
-            if st.button("DAME IDEAS"):
-                if not perfil.get("nombre"):
-                    st.error("Primero guarda el perfil del negocio.")
-                else:
-                    with st.spinner("Buscando ideas para este negocio..."):
-                        st.session_state["ideas_sugeridas"] = generar_ideas_con_ia(
-                            perfil,
-                            formato_contenido,
-                            objetivo,
-                            historial
-                        )
-
-            if "ideas_sugeridas" in st.session_state:
-                ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
-                for i, idea in enumerate(ideas[:4]):
-                    titulo = idea.get("titulo", f"Idea {i+1}")
-                    desc = idea.get("descripcion", "")
-                    razon = idea.get("por_que_funciona", "")
-
-                    st.markdown(f"""
-                    <div class='card'>
-                    <b>{titulo}</b><br>
-                    <span class='small'>{razon}</span><br><br>
-                    {desc}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    if st.button(f"USAR IDEA {i+1}", key=f"usar_idea_{i}"):
-                        st.session_state["descripcion_actual"] = desc
-                        st.rerun()
+            st.markdown("<p class='soft-note'>Escribe una idea o deja que el Community Manager Virtual te proponga opciones.</p>", unsafe_allow_html=True)
 
             descripcion = st.text_area(
                 "Mensaje",
-                height=130,
+                height=115,
                 max_chars=260,
                 placeholder="Ej: Quiero avisar que hoy quedan horas disponibles para reservar.",
                 key="descripcion_actual",
                 label_visibility="collapsed"
             )
 
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("ATRÁS", key="atras_3"):
-                    st.session_state["crear_step"] = 2
-                    st.rerun()
-            with c2:
-                if st.button("SIGUIENTE", key="sig_3"):
+            c_ideas, c_next = st.columns([1,1])
+
+            with c_ideas:
+                if st.button("NO SÉ QUÉ PUBLICAR"):
+                    if not perfil.get("nombre"):
+                        st.error("Primero guarda el perfil del negocio.")
+                    else:
+                        with st.spinner("Buscando ideas para este negocio..."):
+                            st.session_state["ideas_sugeridas"] = generar_ideas_con_ia(
+                                perfil,
+                                formato_contenido,
+                                objetivo,
+                                historial
+                            )
+                        st.rerun()
+
+            with c_next:
+                if st.button("USAR MI TEXTO"):
                     if not st.session_state["descripcion_actual"].strip():
-                        st.error("Escribe algo o elige una idea.")
+                        st.error("Escribe algo o pide ideas.")
                     else:
                         st.session_state["crear_step"] = 4
                         st.rerun()
 
+            if st.session_state.get("ideas_sugeridas"):
+                st.markdown("<div class='step-title'>Elige una idea</div>", unsafe_allow_html=True)
+                ideas = st.session_state["ideas_sugeridas"].get("ideas", [])
+
+                cols = st.columns(4)
+
+                for i, idea in enumerate(ideas[:4]):
+                    titulo = idea.get("titulo", f"Idea {i+1}")
+                    desc = idea.get("descripcion", "")
+                    razon = idea.get("por_que_funciona", "")
+
+                    with cols[i]:
+                        st.markdown(f"""
+                        <div class='card' style='min-height:170px;'>
+                        <b>{titulo}</b><br><br>
+                        <span class='small'>{razon}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        if st.button(titulo[:28], key=f"idea_click_{i}"):
+                            st.session_state["descripcion_actual"] = desc
+                            st.session_state["crear_step"] = 4
+                            st.rerun()
+
+            if st.button("ATRÁS", key="atras_3"):
+                st.session_state["crear_step"] = 2
+                st.rerun()
+
         elif step == 4:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
-            descripcion = st.session_state["descripcion_actual"]
+            descripcion = st.session_state.get("descripcion_actual", "")
 
             st.markdown("<div class='step-title'>Sube una foto opcional</div>", unsafe_allow_html=True)
+            st.markdown(f"<p class='soft-note'><b>Idea elegida:</b> {descripcion}</p>", unsafe_allow_html=True)
             st.markdown("<p class='soft-note'>Puedes generar igual sin foto, pero una imagen real ayuda más.</p>", unsafe_allow_html=True)
 
             foto = st.file_uploader(
                 "Foto",
                 type=["jpg","jpeg","png","webp"],
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key="foto_crear"
             )
 
             c1, c2 = st.columns(2)
+
             with c1:
                 if st.button("ATRÁS", key="atras_4"):
                     st.session_state["crear_step"] = 3
                     st.rerun()
+
             with c2:
                 generar = st.button("GENERAR CONTENIDO")
-        else:
-            generar = False
 
     with der:
         st.markdown("## Resultado")
@@ -592,7 +617,7 @@ with tab_crear:
         if st.session_state.get("crear_step") == 4:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
-            descripcion = st.session_state["descripcion_actual"]
+            descripcion = st.session_state.get("descripcion_actual", "")
         else:
             generar = False
 
@@ -607,7 +632,14 @@ with tab_crear:
                     st.session_state['design_variant'] = 0
                     st.session_state['last_foto'] = foto
                     st.session_state['last_formato'] = formato_contenido
-                    post = crear_imagen_base(perfil, data, foto, st.session_state['design_variant'], formato_contenido)
+
+                    post = crear_imagen_base(
+                        perfil,
+                        data,
+                        foto,
+                        st.session_state['design_variant'],
+                        formato_contenido
+                    )
 
                     buffer = io.BytesIO()
                     post.save(buffer, format="PNG")
@@ -626,11 +658,6 @@ with tab_crear:
                         "gancho": data.get("gancho_visual","")
                     })
                     save_json(HISTORY_PATH, historial)
-
-                    st.session_state["crear_step"] = 1
-                    st.session_state["descripcion_actual"] = ""
-                    if "ideas_sugeridas" in st.session_state:
-                        del st.session_state["ideas_sugeridas"]
 
         if "post_buffer" in st.session_state:
             cbtn1, cbtn2 = st.columns(2)
