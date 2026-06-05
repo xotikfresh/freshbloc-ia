@@ -30,6 +30,22 @@ h1,h2,h3,p,label,span {color:#15151a!important;}
 .stButton>button,.stDownloadButton>button {background:#913CFF!important;color:white!important;border:none!important;border-radius:16px!important;font-weight:900!important;padding:.9rem 1.2rem!important;}
 [data-testid="stFileUploader"] {background:#fff;border:1px dashed #b894ff;border-radius:18px;padding:14px;}
 .small {color:#555!important;font-size:15px;}
+[data-testid="stTextAreaCharCounter"] {
+    color:#9b8bbd!important;
+    font-size:12px!important;
+    opacity:.55!important;
+}
+.step-title {
+    font-size:18px;
+    font-weight:900;
+    margin-bottom:6px;
+}
+.soft-note {
+    color:#7b6a99!important;
+    font-size:14px;
+    margin-top:-6px;
+    margin-bottom:12px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,7 +101,7 @@ def wrap(texto, font, max_w):
         lineas.append(actual)
     return lineas
 
-def generar_con_ia(perfil, descripcion, objetivo, historial):
+def generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial):
     prompt = f"""
 Eres un community manager profesional para negocios pequeños de Chile.
 
@@ -120,7 +136,10 @@ Formato:
 Perfil:
 {json.dumps(perfil, ensure_ascii=False)}
 
-Objetivo de publicación:
+Formato que quiere crear:
+{formato_contenido}
+
+Objetivo:
 {objetivo}
 
 Quiere comunicar:
@@ -133,6 +152,8 @@ Reglas:
 - No inventes precios, fechas, stock, descuentos, eventos ni dirección.
 - Si el usuario da precio o fecha, úsalo.
 - Usa solo servicios y material disponible del perfil.
+- Si formato_contenido es "Historia", genera textos más cortos, directos e interactivos.
+- Si formato_contenido es "Publicación", genera un post más vendedor y explicativo.
 - Gancho visual máximo 4 palabras, comercial y directo.
 - Subtítulo visual máximo 8 palabras.
 - El texto visual debe salir de lo que el usuario comunicó, no de una interpretación inventada.
@@ -193,7 +214,7 @@ Reglas:
 
 
 
-def crear_imagen_base(perfil, data, foto=None, variante=0):
+def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación'):
     rubro = perfil.get("rubro", "").lower()
 
     if "barber" in rubro:
@@ -205,7 +226,10 @@ def crear_imagen_base(perfil, data, foto=None, variante=0):
     else:
         fondo, acento = (248, 245, 255), MORADO
 
-    img = Image.new("RGB", (ANCHO, ALTO), fondo)
+    ancho_final = 1080
+    alto_final = 1920 if formato_contenido == "Historia" else 1080
+
+    img = Image.new("RGB", (ancho_final, alto_final), fondo)
     d = ImageDraw.Draw(img)
 
     gancho = data.get("gancho_visual", "").upper().strip()
@@ -224,50 +248,50 @@ def crear_imagen_base(perfil, data, foto=None, variante=0):
 
         if layout == 0:
             # Foto arriba grande + bloque inferior
-            main = recortar(foto_base, 1080, 700)
+            main = recortar(foto_base, ancho_final, 1180 if formato_contenido == 'Historia' else 700)
             img.paste(main, (0, 0))
-            d.rectangle((0, 690, 1080, 1080), fill=fondo)
-            x, y = 70, 760
+            d.rectangle((0, 1160 if formato_contenido == 'Historia' else 690, ancho_final, alto_final), fill=fondo)
+            x, y = 70, 1260 if formato_contenido == 'Historia' else 760
             text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
             sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
 
         elif layout == 1:
             # Foto completa + franja oscura inferior
-            main = recortar(foto_base, 1080, 1080)
+            main = recortar(foto_base, ancho_final, alto_final)
             img.paste(main, (0, 0))
-            overlay = Image.new("RGBA", (1080,1080), (0,0,0,0))
+            overlay = Image.new("RGBA", (ancho_final, alto_final), (0,0,0,0))
             od = ImageDraw.Draw(overlay)
-            od.rectangle((0, 650, 1080, 1080), fill=(0,0,0,210))
+            od.rectangle((0, 1260 if formato_contenido == 'Historia' else 650, ancho_final, alto_final), fill=(0,0,0,210))
             img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
             d = ImageDraw.Draw(img)
-            x, y = 70, 735
+            x, y = 70, 1340 if formato_contenido == 'Historia' else 735
             text_color = (255,255,255)
             sub_color = (225,225,225)
 
         elif layout == 2:
             # Fondo claro, foto circular/rounded centrada
-            d.rectangle((0, 0, 1080, 1080), fill=fondo)
+            d.rectangle((0, 0, ancho_final, alto_final), fill=fondo)
             main = recortar(foto_base, 850, 620)
             mask = Image.new("L", (850,620), 0)
             md = ImageDraw.Draw(mask)
             md.rounded_rectangle((0,0,850,620), radius=45, fill=255)
             img.paste(main, (115, 90), mask)
-            x, y = 90, 760
+            x, y = 90, 1260 if formato_contenido == 'Historia' else 760
             text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
             sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
 
         else:
             # Split editorial
-            d.rectangle((0, 0, 1080, 1080), fill=fondo)
-            main = recortar(foto_base, 540, 1080)
+            d.rectangle((0, 0, ancho_final, alto_final), fill=fondo)
+            main = recortar(foto_base, 540, alto_final)
             img.paste(main, (540, 0))
-            x, y = 65, 330
+            x, y = 65, 620 if formato_contenido == 'Historia' else 330
             text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
             sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
 
     else:
-        d.rounded_rectangle((55,55,1025,1025), radius=42, outline=acento, width=8)
-        x, y = 85, 390
+        d.rounded_rectangle((55,55,1025,alto_final-55), radius=42, outline=acento, width=8)
+        x, y = 85, 760 if formato_contenido == 'Historia' else 390
         text_color = (20,20,24)
         sub_color = (70,70,75)
 
@@ -283,7 +307,7 @@ def crear_imagen_base(perfil, data, foto=None, variante=0):
         y += 44
 
     # Línea/acento visual discreto
-    d.rounded_rectangle((x, min(y + 28, 1015), x + 180, min(y + 40, 1027)), radius=8, fill=acento)
+    d.rounded_rectangle((x, min(y + 28, alto_final-65), x + 180, min(y + 40, alto_final-53)), radius=8, fill=acento)
 
     return img
 
@@ -343,42 +367,98 @@ with tab_inicio:
             st.markdown(f"<div class='card'><b>{item.get('dia')} · {item.get('hora')}</b><br><b>{item.get('tipo')}</b>: {item.get('idea')}<br><span class='small'>{item.get('objetivo')}</span></div>", unsafe_allow_html=True)
 
 with tab_crear:
-    izq, der = st.columns([0.9,1.1], gap="large")
+    izq, der = st.columns([0.85,1.15], gap="large")
 
     with izq:
-        st.markdown("## Crear publicación")
-        st.markdown(f"<div class='card'><b>Negocio:</b> {perfil.get('nombre') or 'Sin nombre'}<br><b>Rubro:</b> {perfil.get('rubro')}<br><b>Tono:</b> {perfil.get('tono')}<br><b>Días:</b> {perfil.get('dias_publicacion')} · {perfil.get('horario_preferido')}</div>", unsafe_allow_html=True)
+        st.markdown("## Crear contenido")
 
-        objetivo = st.selectbox("Objetivo de la publicación", [
-            "Vender una promoción",
-            "Mostrar un producto o servicio",
-            "Avisar horario o disponibilidad",
-            "Recordar que pueden reservar",
-            "Llenar horas disponibles",
-            "Anunciar algo nuevo",
-            "Educar al cliente",
-            "Hacer una historia interactiva",
-            "Crear confianza",
-            "Otro"
-        ])
+        st.markdown(f"""
+        <div class='card'>
+        <b>Negocio:</b> {perfil.get('nombre') or 'Sin nombre'}<br>
+        <b>Rubro:</b> {perfil.get('rubro')}<br>
+        <b>Tono:</b> {perfil.get('tono')}
+        </div>
+        """, unsafe_allow_html=True)
 
-        descripcion = st.text_area("Qué quieres comunicar", height=150, placeholder="Ej: Cortes a $5000 solo por esta tarde.")
-        foto = st.file_uploader("Sube foto del producto/local/persona", type=["jpg","jpeg","png","webp"])
-        generar = st.button("GENERAR PUBLICACIÓN")
+        st.markdown("<div class='step-title'>1. ¿Qué quieres crear?</div>", unsafe_allow_html=True)
+        formato_contenido = st.radio(
+            "Formato",
+            ["Publicación", "Historia"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+        st.markdown("<div class='step-title'>2. ¿Cuál es el objetivo?</div>", unsafe_allow_html=True)
+
+        if formato_contenido == "Historia":
+            objetivos = [
+                "Mantener activa la cuenta",
+                "Hacer una encuesta",
+                "Avisar disponibilidad",
+                "Recordar reservas",
+                "Mostrar algo rápido",
+                "Generar interacción",
+                "Última oportunidad",
+                "Otro"
+            ]
+            placeholder = "Ej: quedan pocas horas disponibles para hoy, quiero que la gente responda por interno."
+            ayuda = "Las historias sirven para activar a quienes ya siguen el negocio."
+        else:
+            objetivos = [
+                "Vender una promoción",
+                "Mostrar un producto o servicio",
+                "Avisar horario o disponibilidad",
+                "Recordar que pueden reservar",
+                "Llenar horas disponibles",
+                "Anunciar algo nuevo",
+                "Educar al cliente",
+                "Crear confianza",
+                "Otro"
+            ]
+            placeholder = "Ej: Cortes a $5000 solo por esta tarde."
+            ayuda = "Las publicaciones sirven para vender, informar o posicionar el negocio."
+
+        st.markdown(f"<p class='soft-note'>{ayuda}</p>", unsafe_allow_html=True)
+
+        objetivo = st.selectbox(
+            "Objetivo",
+            objetivos,
+            label_visibility="collapsed"
+        )
+
+        st.markdown("<div class='step-title'>3. ¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
+        descripcion = st.text_area(
+            "Mensaje",
+            height=130,
+            max_chars=260,
+            placeholder=placeholder,
+            label_visibility="collapsed"
+        )
+
+        st.markdown("<div class='step-title'>4. Sube una foto opcional</div>", unsafe_allow_html=True)
+        foto = st.file_uploader(
+            "Foto",
+            type=["jpg","jpeg","png","webp"],
+            label_visibility="collapsed"
+        )
+
+        generar = st.button("GENERAR CONTENIDO")
 
     with der:
         st.markdown("## Resultado")
+
         if generar:
             if not perfil.get("nombre"):
                 st.error("Primero guarda el perfil del negocio.")
             elif not descripcion.strip():
                 st.error("Escribe qué quieres comunicar.")
             else:
-                with st.spinner("Tu Community Manager Virtual está preparando la publicación..."):
-                    data = generar_con_ia(perfil, descripcion, objetivo, historial)
+                with st.spinner("Tu Community Manager Virtual está preparando el contenido..."):
+                    data = generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial)
                     st.session_state['design_variant'] = 0
                     st.session_state['last_foto'] = foto
-                    post = crear_imagen_base(perfil, data, foto, st.session_state['design_variant'])
+                    st.session_state['last_formato'] = formato_contenido
+                    post = crear_imagen_base(perfil, data, foto, st.session_state['design_variant'], formato_contenido)
 
                     buffer = io.BytesIO()
                     post.save(buffer, format="PNG")
@@ -389,6 +469,7 @@ with tab_crear:
 
                     historial.append({
                         "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "formato": formato_contenido,
                         "tipo": objetivo,
                         "descripcion": descripcion,
                         "dia_recomendado": data.get("dia_recomendado",""),
@@ -398,36 +479,47 @@ with tab_crear:
                     save_json(HISTORY_PATH, historial)
 
         if "post_buffer" in st.session_state:
-            if st.button("REHACER DISEÑO"):
-                st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
-                post = crear_imagen_base(
-                    perfil,
-                    st.session_state["data"],
-                    st.session_state.get("last_foto"),
-                    st.session_state["design_variant"]
+            cbtn1, cbtn2 = st.columns(2)
+
+            with cbtn1:
+                if st.button("REHACER DISEÑO"):
+                    st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
+                    post = crear_imagen_base(
+                        perfil,
+                        st.session_state["data"],
+                        st.session_state.get("last_foto"),
+                        st.session_state["design_variant"],
+                        st.session_state.get("last_formato", "Publicación")
+                    )
+                    buffer = io.BytesIO()
+                    post.save(buffer, format="PNG")
+                    buffer.seek(0)
+                    st.session_state["post_buffer"] = buffer.getvalue()
+
+            with cbtn2:
+                st.download_button(
+                    "DESCARGAR",
+                    data=st.session_state["post_buffer"],
+                    file_name=f"contenido_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    mime="image/png"
                 )
-                buffer = io.BytesIO()
-                post.save(buffer, format="PNG")
-                buffer.seek(0)
-                st.session_state["post_buffer"] = buffer.getvalue()
 
             st.image(st.session_state["post_buffer"], use_container_width=True)
-            st.download_button("DESCARGAR IMAGEN", data=st.session_state["post_buffer"], file_name=f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png", mime="image/png")
 
         if "data" in st.session_state:
             data = st.session_state["data"]
             visual = data.get("direccion_visual", {})
 
-            st.markdown("### Caption Instagram")
-            st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
-
-            st.markdown("### Historia Instagram")
-            st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
+            st.markdown("### Texto principal")
+            if st.session_state.get("last_formato") == "Historia":
+                st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
 
             st.markdown("### WhatsApp")
             st.markdown(f"<div class='card'>{data.get('mensaje_whatsapp','')}</div>", unsafe_allow_html=True)
 
-            st.markdown("### Dirección visual del CM")
+            st.markdown("### Dirección visual sugerida")
             st.markdown(f"""
             <div class="purple">
             <b>Foto ideal:</b> {visual.get('foto_ideal','')}<br>
@@ -438,14 +530,12 @@ with tab_crear:
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("### Cuándo publicar")
+            st.markdown("### Cuándo subirlo")
             st.markdown(f"<div class='card'><b>{data.get('dia_recomendado','')}</b> a las <b>{data.get('hora_recomendada','')}</b><br>{data.get('motivo_horario','')}</div>", unsafe_allow_html=True)
-
-            st.markdown("### Recordatorio WhatsApp")
-            st.markdown(f"<div class='card'>{data.get('recordatorio_whatsapp','')}</div>", unsafe_allow_html=True)
 
             st.markdown("### Hashtags")
             st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
+
 
 with tab_perfil:
     st.markdown("## Perfil único del negocio")
