@@ -4,7 +4,7 @@ from groq import Groq
 import os, json, io, random
 from datetime import datetime
 
-st.set_page_config(page_title="Community Manager Virtual", page_icon="💜", layout="wide")
+st.set_page_config(page_title="Dago", page_icon="💜", layout="wide")
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -21,7 +21,43 @@ st.markdown("""
 .stApp {background:linear-gradient(180deg,#ffffff,#f7f2ff); color:#15151a;}
 .block-container {max-width:1350px; padding:1.5rem 2rem;}
 h1,h2,h3,p,label,span {color:#15151a!important;}
-.hero {background:linear-gradient(135deg,#ffffff,#efe3ff);border:1px solid #dccbff;border-radius:28px;padding:30px;margin-bottom:22px;}
+.hero {
+    background:linear-gradient(135deg,#ffffff,#f2eaff);
+    border:1px solid #e2d3ff;
+    border-radius:26px;
+    padding:24px;
+    margin-bottom:18px;
+}
+.hero h1 {
+    font-size:42px!important;
+    margin-bottom:8px!important;
+}
+.hero p {
+    font-size:17px!important;
+}
+@media (max-width: 760px) {
+    .block-container {padding:1rem!important;}
+    .hero h1 {font-size:30px!important;}
+    .hero {padding:18px!important;}
+    h2 {font-size:26px!important;}
+    h3 {font-size:21px!important;}
+}
+.home-card {
+    background:#fff;
+    border:1px solid #eadfff;
+    border-radius:22px;
+    padding:18px;
+    box-shadow:0 8px 22px rgba(90,50,150,.07);
+}
+.home-main {
+    background:#fff;
+    border:1px solid #e4d7ff;
+    border-radius:26px;
+    padding:24px;
+    margin-bottom:18px;
+    box-shadow:0 10px 28px rgba(90,50,150,.08);
+}
+
 .card {background:#fff;border:1px solid #e3d7ff;border-radius:22px;padding:20px;margin-bottom:16px;box-shadow:0 8px 24px rgba(90,50,150,.08);}
 .purple {background:linear-gradient(135deg,#913CFF,#5f1ed6);color:white!important;border-radius:22px;padding:22px;margin-bottom:16px;}
 .purple * {color:white!important;}
@@ -433,42 +469,101 @@ historial = load_json(HISTORY_PATH, [])
 
 st.markdown("""
 <div class="hero">
-<h1>Community Manager Virtual</h1>
-<p class="small">Te dice qué publicar, cuándo publicarlo y te deja el contenido listo.</p>
+<h1>Dago</h1>
+<p class="small">Tu Community Manager en un click.</p>
 </div>
 """, unsafe_allow_html=True)
 
 tab_inicio, tab_crear, tab_perfil, tab_historial = st.tabs(["Inicio", "Crear publicación", "Perfil del negocio", "Calendario / historial"])
 
 with tab_inicio:
-    st.markdown("## Panel principal")
+    st.markdown("## Inicio")
+
     if perfil.get("nombre"):
-        st.markdown(f"<div class='purple'><h3>{perfil['nombre']}</h3><p>{perfil['rubro']} · tono {perfil['tono']}</p><p>{perfil['dias_publicacion']} · {perfil['horario_preferido']}</p></div>", unsafe_allow_html=True)
+        negocio = perfil.get("nombre")
+        rubro = perfil.get("rubro")
+        tono = perfil.get("tono")
+        dias = perfil.get("dias_publicacion")
+        hora = perfil.get("horario_preferido")
+
+        st.markdown(f"""
+        <div class="home-main">
+        <h2>Hola, {negocio}</h2>
+        <p class="small">Dago está listo para ayudarte a crear contenido para tu {rubro.lower()} con tono {tono.lower()}.</p>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.markdown("<div class='purple'><h3>Completa primero el perfil del negocio</h3><p>Así el sistema trabajará personalizado.</p></div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="home-main">
+        <h2>Configura tu negocio</h2>
+        <p class="small">Completa el perfil para que Dago pueda crear ideas, publicaciones e historias personalizadas.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    c1,c2,c3 = st.columns(3)
+    cta1, cta2 = st.columns([1,1])
+
+    with cta1:
+        if st.button("CREAR CONTENIDO AHORA", use_container_width=True):
+            st.session_state["crear_step"] = 1
+            st.session_state["ideas_sugeridas"] = None
+            st.session_state["descripcion_actual"] = ""
+            st.success("Listo. Entra a la pestaña Crear publicación para comenzar.")
+
+    with cta2:
+        if st.button("GENERAR PLAN SEMANAL", use_container_width=True):
+            if not perfil.get("nombre"):
+                st.error("Primero guarda el perfil.")
+            else:
+                with st.spinner("Preparando plan semanal..."):
+                    st.session_state["plan"] = generar_plan_semanal(perfil, historial)
+
+    c1, c2, c3 = st.columns(3)
+
     with c1:
-        st.markdown(f"<div class='card'><h3>Próxima publicación</h3><p>{perfil.get('dias_publicacion')}<br><b>{perfil.get('horario_preferido')}</b></p></div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"<div class='card'><h3>Publicaciones creadas</h3><p><b>{len(historial)}</b> publicaciones guardadas</p></div>", unsafe_allow_html=True)
-    with c3:
-        ultima = historial[-1]["gancho"] if historial else "Aún no hay contenido"
-        st.markdown(f"<div class='card'><h3>Última idea</h3><p>{ultima}</p></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="home-card">
+        <h3>Próxima idea</h3>
+        <p>{perfil.get('dias_publicacion','Define tus días')}</p>
+        <b>{perfil.get('horario_preferido','19:00')}</b>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("## Plan semanal")
-    if st.button("GENERAR PLAN SEMANAL"):
-        if not perfil.get("nombre"):
-            st.error("Primero guarda el perfil.")
-        else:
-            with st.spinner("Preparando plan semanal..."):
-                st.session_state["plan"] = generar_plan_semanal(perfil, historial)
+    with c2:
+        st.markdown(f"""
+        <div class="home-card">
+        <h3>Contenido creado</h3>
+        <p><b>{len(historial)}</b> piezas guardadas</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        ultima = historial[-1]["gancho"] if historial else "Aún no hay ideas"
+        st.markdown(f"""
+        <div class="home-card">
+        <h3>Última idea</h3>
+        <p>{ultima}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     if "plan" in st.session_state:
         plan = st.session_state["plan"]
-        st.markdown(f"<div class='purple'><b>{plan.get('resumen','')}</b><br>{plan.get('recomendacion_general','')}</div>", unsafe_allow_html=True)
+        st.markdown("## Plan recomendado")
+        st.markdown(f"""
+        <div class="home-main">
+        <b>{plan.get('resumen','')}</b><br>
+        <span class="small">{plan.get('recomendacion_general','')}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
         for item in plan.get("plan", []):
-            st.markdown(f"<div class='card'><b>{item.get('dia')} · {item.get('hora')}</b><br><b>{item.get('tipo')}</b>: {item.get('idea')}<br><span class='small'>{item.get('objetivo')}</span></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="home-card">
+            <b>{item.get('dia')} · {item.get('hora')}</b><br>
+            <b>{item.get('tipo')}</b>: {item.get('idea')}<br>
+            <span class="small">{item.get('objetivo')}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
 
 with tab_crear:
     if "crear_step" not in st.session_state:
@@ -554,7 +649,7 @@ with tab_crear:
             objetivo = st.session_state["crear_objetivo"]
 
             st.markdown("<div class='big-question'>¿Qué quieres comunicar?</div>", unsafe_allow_html=True)
-            st.markdown("<p class='soft-note'>Escribe una idea o pídele al sistema que piense por ti.</p>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Escribe una idea o pídele a Dago que piense por ti.</p>", unsafe_allow_html=True)
 
             descripcion = st.text_area(
                 "Mensaje",
@@ -663,7 +758,7 @@ with tab_crear:
                 elif not descripcion.strip():
                     st.error("Escribe qué quieres comunicar.")
                 else:
-                    with st.spinner("Tu Community Manager Virtual está preparando el contenido..."):
+                    with st.spinner("Dago está preparando tu contenido..."):
                         data = generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial)
                         st.session_state["design_variant"] = 0
                         st.session_state["last_foto"] = foto
