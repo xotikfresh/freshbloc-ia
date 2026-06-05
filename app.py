@@ -176,11 +176,27 @@ def wrap(texto, font, max_w):
 
 def generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial):
     prompt = f"""
-Eres un community manager profesional para negocios pequeños de Chile.
+Actúa como Dago, un Community Manager profesional para negocios pequeños de Chile.
 
-Devuelve SOLO JSON válido.
+Tu trabajo NO es escribir frases bonitas al azar.
+Tu trabajo es crear contenido útil para un dueño ocupado que necesita vender, informar o mantener activa su cuenta.
 
-Formato:
+PERFIL DEL NEGOCIO:
+{json.dumps(perfil, ensure_ascii=False)}
+
+FORMATO:
+{formato_contenido}
+
+OBJETIVO:
+{objetivo}
+
+INFORMACIÓN ENTREGADA POR EL USUARIO:
+{descripcion}
+
+HISTORIAL RECIENTE:
+{json.dumps(historial[-8:], ensure_ascii=False)}
+
+DEVUELVE SOLO JSON VÁLIDO:
 {{
   "titulo_post":"",
   "gancho_visual":"",
@@ -206,42 +222,80 @@ Formato:
   }}
 }}
 
-Perfil:
-{json.dumps(perfil, ensure_ascii=False)}
-
-Formato que quiere crear:
-{formato_contenido}
-
-Objetivo:
-{objetivo}
-
-Quiere comunicar:
-{descripcion}
-
-Historial reciente:
-{json.dumps(historial[-8:], ensure_ascii=False)}
-
-Reglas:
-- No inventes precios, fechas, stock, descuentos, eventos ni dirección.
-- Si el usuario da precio o fecha, úsalo.
-- Usa solo servicios y material disponible del perfil.
-- Si formato_contenido es "Historia", genera textos más cortos, directos e interactivos.
-- Si formato_contenido es "Publicación", genera un post más vendedor y explicativo.
-- Gancho visual máximo 4 palabras, comercial y directo.
-- Subtítulo visual máximo 8 palabras.
-- El texto visual debe salir de lo que el usuario comunicó, no de una interpretación inventada.
-- Si el usuario da producto, precio, horario o promoción, prioriza eso en gancho_visual.
-- No inventes nombres creativos para productos.
-- No escribas frases largas en el texto visual.
+REGLAS DURAS:
+- No inventes precios.
+- No inventes descuentos.
+- No inventes stock.
+- No inventes eventos.
+- No inventes horarios.
+- No inventes fechas.
+- No inventes disponibilidad.
+- No inventes testimonios.
+- No inventes antes/después.
+- Si el usuario dio precio, producto, horario o condición, úsalo exactamente.
+- Si falta un dato, no lo inventes: redacta de forma útil usando solo lo disponible.
 - No uses el nombre del negocio como gancho visual.
-- No pongas el nombre del negocio dentro del texto de la imagen.
-- Si la foto subida no sirve, dilo en idea_foto y sugiere una alternativa fácil.
-- No recomiendes antes/después, testimonios o clientes si el perfil no dice que tiene ese material.
+- No pongas el nombre del negocio dentro de la imagen.
+- Usa lenguaje chileno natural, claro y profesional.
+- El texto de imagen debe ser corto y legible.
+
+SI EL OBJETIVO ES "Vender una promoción":
+- El contenido debe sonar como PROMOCIÓN real, no branding.
+- El gancho visual debe priorizar producto + precio/beneficio si existe.
+- Ejemplos buenos:
+  "CAFÉ + MEDIALUNA"
+  "CORTES A $5.000"
+  "COMBO DESAYUNO"
+  "PROMO HASTA HOY"
+- Ejemplos malos:
+  "DESCUBRE SABORES"
+  "EXPERIENCIA ÚNICA"
+  "CONOCE NUESTRA VARIEDAD"
+- El caption debe responder:
+  qué se ofrece,
+  cuánto cuesta si existe,
+  hasta cuándo dura si existe,
+  cómo pedir/reservar.
+- Si no hay precio, no inventes precio.
+- Si no hay vigencia, no inventes urgencia falsa.
+
+SI EL FORMATO ES "Historia":
+- Debe ser breve.
+- Puede tener encuesta, pregunta, sticker o llamado a responder.
+- Máximo 1 idea principal.
+- Gancho visual máximo 4 palabras.
+- Subtítulo máximo 7 palabras.
+
+SI EL FORMATO ES "Publicación":
+- Puede explicar un poco más.
+- Caption de 2 a 4 líneas.
+- Gancho visual máximo 4 palabras.
+- Subtítulo máximo 9 palabras.
+
+DIRECCIÓN VISUAL:
+- Sugiere diseño simple y realista.
+- Si la foto no sirve, dilo en idea_foto.
+- Evita exceso de texto.
+- El texto_en_imagen debe ser corto.
+
+HASHTAGS:
+- Máximo 8.
+- Rubro + ciudad si existe + intención.
+- Sin hashtags ridículos.
+
+Antes de responder revisa:
+1. ¿Respeta el objetivo?
+2. ¿Inventé algo?
+3. ¿Esto lo subiría un negocio real?
+4. ¿El texto visual es corto?
+5. ¿Ayuda a vender, informar o activar audiencia?
+
+Devuelve SOLO JSON válido.
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.45,
+        temperature=0.28,
         response_format={"type": "json_object"}
     )
     data = json.loads(r.choices[0].message.content)
@@ -289,13 +343,24 @@ Reglas:
 
 def generar_ideas_con_ia(perfil, formato_contenido, objetivo, historial):
     prompt = f"""
-Eres un community manager creativo para negocios pequeños de Chile.
+Actúa como Dago, un Community Manager estratégico para negocios pequeños de Chile.
 
-El usuario no sabe qué publicar. Tu trabajo es quitarle el bloqueo creativo.
+El usuario NO sabe qué publicar.
+Tu trabajo es darle 4 caminos concretos y útiles, sin inventar datos.
 
-Devuelve SOLO JSON válido.
+PERFIL:
+{json.dumps(perfil, ensure_ascii=False)}
 
-Formato:
+FORMATO:
+{formato_contenido}
+
+OBJETIVO:
+{objetivo}
+
+HISTORIAL:
+{json.dumps(historial[-8:], ensure_ascii=False)}
+
+DEVUELVE SOLO JSON:
 {{
  "ideas":[
    {{"titulo":"","descripcion":"","por_que_funciona":""}},
@@ -305,38 +370,96 @@ Formato:
  ]
 }}
 
-Perfil del negocio:
-{json.dumps(perfil, ensure_ascii=False)}
+REGLAS DURAS:
+- No inventes precio.
+- No inventes descuento.
+- No inventes stock.
+- No inventes horario.
+- No inventes evento.
+- No inventes testimonio.
+- No inventes antes/después.
+- No inventes disponibilidad.
+- No inventes clientes.
+- Usa solo productos, servicios y material disponible del perfil.
 
-Formato:
-{formato_contenido}
+SI OBJETIVO = "Vender una promoción":
+Las 4 ideas deben ser PROMOCIONES accionables, no branding.
+No escribas ideas como “conoce nuestra variedad”.
+Cada idea debe indicar qué dato comercial falta completar si falta.
 
-Objetivo:
-{objetivo}
+Buenas ideas:
+1. Promo producto estrella: elegir un producto/servicio real y agregar precio real.
+2. Combo simple: juntar dos productos/servicios reales sin inventar precio.
+3. Promo por horario: usar horario real entregado por el negocio.
+4. Beneficio limitado: solo si el dueño luego confirma condición.
 
-Historial reciente:
-{json.dumps(historial[-8:], ensure_ascii=False)}
+Cada descripción debe sonar así:
+"Promocionar [producto/servicio real] usando precio real y una condición clara. Ideal para comunicar una oferta directa sin inventar descuentos."
 
-Reglas:
-- Entrega 4 ideas concretas y distintas.
-- No inventes descuentos, eventos, stock, testimonios ni antes/después si el perfil no lo menciona.
-- Usa solo servicios reales y material disponible del perfil.
-- Si es Historia, prioriza interacción, respuestas, encuestas, disponibilidad o recordatorios.
-- Si es Publicación, prioriza venta, servicio destacado, confianza o educación.
-- Las descripciones deben poder usarse directamente como mensaje para generar contenido.
-- No uses ideas genéricas tipo "publica algo llamativo".
+Si el perfil no tiene producto claro, pide elegir producto:
+"Elegir un producto principal del negocio, agregar precio real y vigencia."
+
+SI OBJETIVO = "Mostrar un producto o servicio":
+- Ideas para destacar calidad, beneficio o uso.
+- No lo conviertas en promoción.
+
+SI OBJETIVO = "Avisar horario o disponibilidad":
+- Ideas claras.
+- No inventes cupos.
+
+SI OBJETIVO = "Recordar que pueden reservar":
+- Ideas para reservas por WhatsApp o mensaje.
+- No digas últimos cupos si no está confirmado.
+
+SI OBJETIVO = "Educar al cliente":
+- Tips, cuidados, errores comunes, beneficios.
+
+SI OBJETIVO = "Crear confianza":
+- Proceso, cuidado, calidad, experiencia.
+- Sin testimonios inventados.
+
+SI FORMATO = "Historia":
+- Ideas para interacción rápida.
+- Encuesta, pregunta, sticker, recordatorio, responder por interno.
+- Debe poder hacerse en menos de 1 minuto.
+
+SI FORMATO = "Publicación":
+- Ideas para feed.
+- Más enfocadas en claridad, venta o posicionamiento.
+
+ESTRUCTURA:
+titulo:
+- máximo 5 palabras
+- concreto
+
+descripcion:
+- instrucción directa para crear contenido
+- debe incluir qué comunicar
+- si falta precio, horario o condición, dilo explícitamente
+
+por_que_funciona:
+- máximo 18 palabras
+- lógica de negocio real
+
+VARIEDAD:
+Entrega 4 ideas distintas:
+1. venta directa
+2. confianza/calidad
+3. interacción
+4. acción rápida
+
+Devuelve SOLO JSON válido.
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.55,
+        temperature=0.25,
         response_format={"type": "json_object"}
     )
     data = json.loads(r.choices[0].message.content)
     if "ideas" not in data or not isinstance(data["ideas"], list):
         data["ideas"] = []
     return data
-
 
 def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación', mostrar_direccion=False):
     rubro = perfil.get("rubro", "").lower()
@@ -571,6 +694,18 @@ def render_creador():
                 label_visibility="collapsed"
             )
 
+            if objetivo == "Vender una promoción":
+                st.markdown("<div class='step-title'>Datos de la promoción</div>", unsafe_allow_html=True)
+                st.markdown("<p class='soft-note'>Para que Dago no invente ofertas, completa lo que tengas. Si algo no aplica, déjalo vacío.</p>", unsafe_allow_html=True)
+
+                pc1, pc2 = st.columns(2)
+                with pc1:
+                    st.text_input("Producto o servicio en promo", key="promo_producto", placeholder="Ej: café + medialuna")
+                    st.text_input("Precio real", key="promo_precio", placeholder="Ej: $4.500")
+                with pc2:
+                    st.text_input("Vigencia", key="promo_vigencia", placeholder="Ej: hasta las 10:00 / solo hoy")
+                    st.text_input("Condición", key="promo_condicion", placeholder="Ej: retiro en local / pagando en efectivo")
+
             b1, b2 = st.columns(2)
             with b1:
                 if st.button("NO SÉ QUÉ PUBLICAR", use_container_width=True):
@@ -588,9 +723,24 @@ def render_creador():
 
             with b2:
                 if st.button("USAR MI TEXTO", use_container_width=True):
-                    if not st.session_state["descripcion_actual"].strip():
-                        st.error("Escribe algo o pide ideas.")
+                    base = st.session_state.get("descripcion_actual", "").strip()
+                    if objetivo == "Vender una promoción":
+                        extras = []
+                        if st.session_state.get("promo_producto"):
+                            extras.append(f"Producto/servicio en promoción: {st.session_state.get('promo_producto')}")
+                        if st.session_state.get("promo_precio"):
+                            extras.append(f"Precio real: {st.session_state.get('promo_precio')}")
+                        if st.session_state.get("promo_vigencia"):
+                            extras.append(f"Vigencia: {st.session_state.get('promo_vigencia')}")
+                        if st.session_state.get("promo_condicion"):
+                            extras.append(f"Condición: {st.session_state.get('promo_condicion')}")
+                        if extras:
+                            base = (base + "\n" if base else "") + "\n".join(extras)
+
+                    if not base:
+                        st.error("Escribe algo, pide ideas o completa datos de la promoción.")
                     else:
+                        st.session_state["descripcion_final"] = base
                         st.session_state["crear_step"] = 4
                         st.rerun()
 
@@ -610,6 +760,7 @@ def render_creador():
                         texto_boton = f"{titulo}\n\n{razon}\n\n{desc[:140]}..."
                         if st.button(texto_boton, key=f"idea_click_{i}", use_container_width=True):
                             st.session_state["idea_elegida_desc"] = desc
+                            st.session_state["descripcion_final"] = desc
                             st.session_state["crear_step"] = 4
                             st.rerun()
 
@@ -623,7 +774,7 @@ def render_creador():
         with izq:
             formato_contenido = st.session_state["crear_formato"]
             objetivo = st.session_state["crear_objetivo"]
-            descripcion = st.session_state.get("idea_elegida_desc") or st.session_state.get("descripcion_actual", "")
+            descripcion = st.session_state.get("descripcion_final") or st.session_state.get("idea_elegida_desc") or st.session_state.get("descripcion_actual", "")
 
             st.markdown("## Resumen")
             st.markdown(f"""
@@ -811,6 +962,9 @@ with tab_inicio:
                 st.session_state["ideas_sugeridas"] = None
                 st.session_state["descripcion_actual"] = ""
                 st.session_state["idea_elegida_desc"] = ""
+                st.session_state["descripcion_final"] = ""
+                for k in ["promo_producto","promo_precio","promo_vigencia","promo_condicion"]:
+                    st.session_state[k] = ""
                 st.rerun()
 
         with cta2:
