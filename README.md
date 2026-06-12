@@ -18,6 +18,20 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## Desplegar en Streamlit Community Cloud
+
+1. Entra a Streamlit Community Cloud y crea una app nueva desde GitHub.
+2. Selecciona el repositorio `xotikfresh/freshbloc-ia`.
+3. Usa la rama `main` y el archivo principal `app.py`.
+4. En "Advanced settings" agrega los secretos:
+
+```toml
+GROQ_API_KEY = "tu_clave_de_groq"
+RECRAFT_API_KEY = "tu_clave_de_recraft"
+```
+
+5. Guarda y despliega.
+
 ## Archivos importantes
 
 - `app.py`: app principal.
