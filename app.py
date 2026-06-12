@@ -1,112 +1,304 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import Image, ImageOps, ImageFilter
 from groq import Groq
-import os, json, io, random
+import os, json, html, io, hmac, hashlib
 from datetime import datetime
+import requests
 
 st.set_page_config(page_title="Dago", page_icon="💜", layout="wide")
 
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-
-DATA_DIR = "data"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+USERS_PATH = os.path.join(DATA_DIR, "usuarios.json")
 PROFILE_PATH = os.path.join(DATA_DIR, "perfil_negocio.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "historial.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-ANCHO, ALTO = 1080, 1080
-MORADO = (145, 60, 255)
+GROQ_MODEL = "llama-3.3-70b-versatile"
+RECRAFT_MODEL = "recraftv4"
+RECRAFT_EDIT_MODEL = "recraftv3"
+RECRAFT_URL = "https://external.api.recraft.ai/v1/images/generations"
+RECRAFT_IMAGE_TO_IMAGE_URL = "https://external.api.recraft.ai/v1/images/imageToImage"
+MAX_RECRAFT_IMAGE_BYTES = 4_800_000
+MIN_RECRAFT_IMAGE_SIDE = 256
+MAX_RECRAFT_IMAGE_SIDE = 4090
+MAX_RECRAFT_IMAGE_PIXELS = 15_500_000
+INSTAGRAM_POST_SIZE = (1080, 1080)
+INSTAGRAM_STORY_SIZE = (1080, 1920)
+MAX_HISTORY_ITEMS = 200
+HISTORY_CONTEXT_ITEMS = 8
+
+Image.MAX_IMAGE_PIXELS = 40_000_000
 
 st.markdown("""
 <style>
-.stApp {background:linear-gradient(180deg,#ffffff,#f7f2ff); color:#15151a;}
-.block-container {max-width:1350px; padding:1.5rem 2rem;}
-h1,h2,h3,p,label,span {color:#15151a!important;}
+:root {
+    --bg:#f5f6fa;
+    --surface:#ffffff;
+    --surface-soft:#f9fafc;
+    --ink:#171821;
+    --muted:#646b78;
+    --line:#dde2ea;
+    --primary:#5b4df1;
+    --primary-dark:#4434d4;
+    --teal:#0f9f8a;
+    --amber:#b7791f;
+    --rose:#c6426e;
+    --shadow:0 10px 26px rgba(18, 24, 40, .075);
+}
+.stApp {
+    background:
+        linear-gradient(180deg, #fafbff 0%, var(--bg) 42%, #f3f5f8 100%);
+    color:var(--ink);
+}
+[data-testid="stHeader"] {background:transparent;}
+.block-container {
+    max-width:1240px;
+    padding:1.25rem 1.5rem 2.5rem;
+}
+h1,h2,h3,p,label,span {color:var(--ink)!important;}
+h2 {
+    font-size:28px!important;
+    letter-spacing:0!important;
+    margin-top:.55rem!important;
+    margin-bottom:.85rem!important;
+}
+h3 {
+    font-size:18px!important;
+    letter-spacing:0!important;
+}
 .hero {
-    background:linear-gradient(135deg,#ffffff,#f2eaff);
-    border:1px solid #e2d3ff;
-    border-radius:26px;
-    padding:24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
     margin-bottom:18px;
+    box-shadow:var(--shadow);
+}
+.brand-lockup {
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+.brand-mark {
+    width:46px;
+    height:46px;
+    border-radius:10px;
+    display:grid;
+    place-items:center;
+    background:#171821;
+    color:#fff!important;
+    font-size:24px;
+    font-weight:900;
+    line-height:1;
 }
 .hero h1 {
-    font-size:42px!important;
-    margin-bottom:8px!important;
+    font-size:27px!important;
+    line-height:1.1!important;
+    margin:0!important;
+    letter-spacing:0!important;
 }
 .hero p {
-    font-size:17px!important;
+    font-size:14px!important;
+    margin:3px 0 0!important;
+    color:var(--muted)!important;
+}
+.status-pill {
+    border:1px solid #b9ece3;
+    background:#effcf8;
+    color:#087c6c!important;
+    border-radius:999px;
+    padding:8px 12px;
+    font-size:13px;
+    font-weight:850;
+    white-space:nowrap;
 }
 @media (max-width: 760px) {
     .block-container {padding:1rem!important;}
-    .hero h1 {font-size:30px!important;}
-    .hero {padding:18px!important;}
-    h2 {font-size:26px!important;}
-    h3 {font-size:21px!important;}
+    .hero {align-items:flex-start; flex-direction:column; padding:14px!important;}
+    .hero h1 {font-size:24px!important;}
+    .brand-mark {width:42px;height:42px;font-size:22px;}
+    h2 {font-size:24px!important;}
+    h3 {font-size:18px!important;}
 }
 .home-card {
-    background:#fff;
-    border:1px solid #eadfff;
-    border-radius:22px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:8px;
     padding:18px;
-    box-shadow:0 8px 22px rgba(90,50,150,.07);
+    min-height:132px;
+    box-shadow:var(--shadow);
 }
 .home-main {
-    background:#fff;
-    border:1px solid #e4d7ff;
-    border-radius:26px;
-    padding:24px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-left:4px solid var(--primary);
+    border-radius:8px;
+    padding:20px;
     margin-bottom:18px;
-    box-shadow:0 10px 28px rgba(90,50,150,.08);
+    box-shadow:var(--shadow);
 }
-
-.card {background:#fff;border:1px solid #e3d7ff;border-radius:22px;padding:20px;margin-bottom:16px;box-shadow:0 8px 24px rgba(90,50,150,.08);}
-.purple {background:linear-gradient(135deg,#913CFF,#5f1ed6);color:white!important;border-radius:22px;padding:22px;margin-bottom:16px;}
+.home-main h2 {margin-top:0!important;}
+.home-card h3 {margin-top:0!important;margin-bottom:10px!important;}
+.home-card p {color:var(--muted)!important;}
+.card-kicker {
+    display:block;
+    color:var(--muted)!important;
+    font-size:12px;
+    font-weight:850;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    margin-bottom:8px;
+}
+.metric-value {
+    display:block;
+    font-size:25px;
+    line-height:1.1;
+    font-weight:900;
+    color:var(--ink)!important;
+    margin-top:8px;
+}
+.accent-teal {border-top:3px solid var(--teal);}
+.accent-amber {border-top:3px solid var(--amber);}
+.accent-rose {border-top:3px solid var(--rose);}
+.card {
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px;
+    margin-bottom:16px;
+    box-shadow:var(--shadow);
+}
+.purple {
+    background:#172033;
+    color:white!important;
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:16px;
+    box-shadow:0 12px 28px rgba(23,32,51,.16);
+}
 .purple * {color:white!important;}
-.stTextInput input,.stTextArea textarea {background:#fff!important;color:#15151a!important;border:1px solid #cdb8ff!important;border-radius:14px!important;font-size:17px!important;}
-.stSelectbox div[data-baseweb="select"] > div {background:#fff!important;border:1px solid #cdb8ff!important;border-radius:14px!important;}
+.stTextInput input,.stTextArea textarea {
+    background:#fff!important;
+    color:var(--ink)!important;
+    border:1px solid #cfd6e3!important;
+    border-radius:8px!important;
+    font-size:16px!important;
+    box-shadow:0 1px 2px rgba(17,24,39,.04)!important;
+}
+.stTextInput input:focus,.stTextArea textarea:focus {
+    border-color:var(--primary)!important;
+    box-shadow:0 0 0 3px rgba(91,77,241,.12)!important;
+}
+.stSelectbox div[data-baseweb="select"] > div {
+    background:#fff!important;
+    border:1px solid #cfd6e3!important;
+    border-radius:8px!important;
+}
 .stButton>button,.stDownloadButton>button {
-    background:#913CFF!important;
+    background:var(--primary)!important;
     color:white!important;
     border:none!important;
-    border-radius:16px!important;
-    font-weight:900!important;
-    padding:.9rem 1.2rem!important;
+    border-radius:8px!important;
+    font-weight:850!important;
+    padding:.82rem 1.05rem!important;
+    box-shadow:0 9px 18px rgba(91,77,241,.20)!important;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
 .stButton>button *,.stDownloadButton>button * {
     color:white!important;
 }
-.idea-card {
+.stButton>button:hover,.stDownloadButton>button:hover {
+    background:var(--primary-dark)!important;
+    transform:translateY(-1px);
+    box-shadow:0 11px 22px rgba(91,77,241,.25)!important;
+}
+.stButton>button:active,.stDownloadButton>button:active {
+    transform:translateY(0);
+}
+.stTabs [data-baseweb="tab-list"] {
+    gap:8px;
+    border-bottom:1px solid var(--line);
+}
+.stTabs [data-baseweb="tab"] {
+    height:42px;
+    border-radius:8px 8px 0 0;
+    padding:0 14px;
+    font-weight:780;
+}
+.stTabs [aria-selected="true"] {
     background:#fff;
-    border:1px solid #d8c6ff;
-    border-radius:24px;
-    padding:22px;
+    border:1px solid var(--line);
+    border-bottom-color:#fff;
+    box-shadow:0 -2px 12px rgba(18,24,40,.05);
+}
+.idea-card {
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px;
     min-height:260px;
-    box-shadow:0 8px 24px rgba(90,50,150,.08);
+    box-shadow:var(--shadow);
     cursor:pointer;
 }
 .idea-card b {
     font-size:18px;
 }
 
-[data-testid="stFileUploader"] {background:#fff;border:1px dashed #b894ff;border-radius:18px;padding:14px;}
-.small {color:#555!important;font-size:15px;}
+[data-testid="stFileUploader"] {
+    background:#fff;
+    border:1px dashed #9da8ff;
+    border-radius:8px;
+    padding:16px;
+}
+[data-testid="stFileUploader"] section {
+    border:0!important;
+}
+[data-testid="stAlert"] {
+    border-radius:8px;
+}
+.small {color:var(--muted)!important;font-size:15px;}
 [data-testid="stTextAreaCharCounter"] {
-    color:#9b8bbd!important;
+    color:#8a90a0!important;
     font-size:12px!important;
     opacity:.55!important;
 }
 .step-title {
     font-size:18px;
-    font-weight:900;
+    font-weight:850;
     margin-bottom:6px;
 }
+.step-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:#eefcf8;
+    border:1px solid #b9ece3;
+    color:#087c6c!important;
+    border-radius:999px;
+    padding:7px 11px;
+    font-size:13px;
+    font-weight:850;
+    margin:6px 0 8px;
+}
+.step-dot {
+    width:8px;
+    height:8px;
+    border-radius:999px;
+    background:var(--teal);
+}
 .soft-note {
-    color:#7b6a99!important;
+    color:var(--muted)!important;
     font-size:14px;
     margin-top:-6px;
     margin-bottom:12px;
 }
 .big-question {
-    font-size:34px;
+    font-size:30px;
     font-weight:900;
     margin-top:22px;
     margin-bottom:10px;
@@ -114,10 +306,237 @@ h1,h2,h3,p,label,span {color:#15151a!important;}
 
 .summary-box {
     background:#ffffff;
-    border:1px solid #e3d7ff;
-    border-radius:22px;
+    border:1px solid var(--line);
+    border-left:4px solid var(--teal);
+    border-radius:8px;
     padding:18px;
     margin-bottom:14px;
+    box-shadow:var(--shadow);
+}
+div[data-testid="stImage"] img {
+    border-radius:8px;
+    border:1px solid var(--line);
+}
+.stSlider [data-baseweb="slider"] {
+    padding-top:8px;
+}
+
+/* Visual v2: morado, llamativo y organizado */
+.stApp {
+    background:
+        radial-gradient(circle at 8% 0%, rgba(145,60,255,.20), transparent 31rem),
+        radial-gradient(circle at 92% 10%, rgba(95,30,214,.15), transparent 28rem),
+        linear-gradient(180deg,#fbf8ff 0%,#f3edff 52%,#ffffff 100%)!important;
+}
+.block-container {
+    max-width:1180px!important;
+}
+.hero {
+    position:relative;
+    overflow:hidden;
+    min-height:150px;
+    padding:26px 28px!important;
+    border:0!important;
+    border-radius:0 22px 0 22px!important;
+    background:
+        linear-gradient(135deg,#3b168f 0%,#7b2ff7 52%,#b24cff 100%)!important;
+    box-shadow:0 22px 48px rgba(91,77,241,.28)!important;
+}
+.hero:before {
+    content:"";
+    position:absolute;
+    inset:auto -70px -95px auto;
+    width:260px;
+    height:260px;
+    border-radius:50%;
+    background:rgba(255,255,255,.15);
+}
+.hero:after {
+    content:"";
+    position:absolute;
+    top:0;
+    right:0;
+    width:35%;
+    height:100%;
+    background:linear-gradient(135deg,transparent 0%,rgba(255,255,255,.17) 100%);
+    clip-path:polygon(32% 0,100% 0,100% 100%,0 100%);
+}
+.brand-lockup,.status-pill {position:relative;z-index:1;}
+.brand-mark {
+    width:58px!important;
+    height:58px!important;
+    border-radius:0 16px 0 16px!important;
+    background:#ffffff!important;
+    color:#6422e7!important;
+    box-shadow:0 14px 28px rgba(25,9,71,.25)!important;
+}
+.hero h1 {
+    color:#fff!important;
+    font-size:36px!important;
+}
+.hero p {
+    color:#efe6ff!important;
+    font-size:16px!important;
+}
+.status-pill {
+    background:rgba(255,255,255,.16)!important;
+    color:#fff!important;
+    border:1px solid rgba(255,255,255,.36)!important;
+    border-radius:0 14px 0 14px!important;
+    backdrop-filter:blur(8px);
+}
+.home-main,.summary-box {
+    position:relative;
+    overflow:hidden;
+    border:0!important;
+    border-radius:0 18px 0 18px!important;
+    background:#ffffff!important;
+    box-shadow:0 18px 40px rgba(72,38,138,.13)!important;
+}
+.home-main:before,.summary-box:before {
+    content:"";
+    position:absolute;
+    left:0;
+    top:0;
+    width:100%;
+    height:6px;
+    background:linear-gradient(90deg,#6d28d9,#a855f7,#22c7aa);
+}
+.home-card {
+    position:relative;
+    overflow:hidden;
+    border:0!important;
+    border-radius:0 18px 0 18px!important;
+    padding:22px!important;
+    min-height:152px!important;
+    background:#fff!important;
+    box-shadow:0 18px 38px rgba(72,38,138,.14)!important;
+}
+.home-card:before {
+    content:"";
+    position:absolute;
+    top:0;
+    right:0;
+    width:74px;
+    height:74px;
+    background:linear-gradient(135deg,#7c3aed,#c084fc);
+    clip-path:polygon(100% 0,100% 100%,0 0);
+}
+.home-card:after {
+    content:"";
+    position:absolute;
+    left:0;
+    bottom:0;
+    width:100%;
+    height:4px;
+    background:linear-gradient(90deg,#7c3aed,#c084fc);
+}
+.accent-teal:after {background:linear-gradient(90deg,#7c3aed,#0f9f8a)!important;}
+.accent-amber:after {background:linear-gradient(90deg,#7c3aed,#f59e0b)!important;}
+.accent-rose:after {background:linear-gradient(90deg,#7c3aed,#e11d74)!important;}
+.metric-value {
+    color:#5b21b6!important;
+    font-size:32px!important;
+}
+.card-kicker {
+    color:#7c3aed!important;
+}
+.action-card {
+    position:relative;
+    overflow:hidden;
+    min-height:118px;
+    padding:20px;
+    margin-bottom:10px;
+    border-radius:0 18px 0 18px;
+    color:#fff!important;
+    box-shadow:0 18px 38px rgba(72,38,138,.16);
+}
+.action-card * {color:#fff!important;}
+.action-card b {
+    display:block;
+    font-size:19px;
+    margin-bottom:7px;
+}
+.action-card span {
+    display:block;
+    color:#f2e9ff!important;
+    font-size:14px;
+}
+.action-card:after {
+    content:"";
+    position:absolute;
+    right:-36px;
+    bottom:-42px;
+    width:150px;
+    height:150px;
+    border-radius:50%;
+    background:rgba(255,255,255,.16);
+}
+.action-primary {
+    background:linear-gradient(135deg,#5b21b6,#8b5cf6);
+}
+.action-secondary {
+    background:linear-gradient(135deg,#312e81,#7c3aed);
+}
+.stButton>button,.stDownloadButton>button {
+    border-radius:0 14px 0 14px!important;
+    background:linear-gradient(135deg,#6d28d9,#9333ea)!important;
+    box-shadow:0 14px 26px rgba(109,40,217,.28)!important;
+}
+.stButton>button:hover,.stDownloadButton>button:hover {
+    background:linear-gradient(135deg,#581c87,#7e22ce)!important;
+}
+.stTabs [data-baseweb="tab-list"] {
+    background:#ffffff;
+    border:1px solid #eadcff!important;
+    border-radius:0 16px 0 16px;
+    padding:8px;
+    box-shadow:0 12px 28px rgba(72,38,138,.10);
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius:0 12px 0 12px!important;
+}
+.stTabs [aria-selected="true"] {
+    background:#6d28d9!important;
+    border:0!important;
+}
+.stTabs [aria-selected="true"] p {
+    color:#fff!important;
+}
+.card,.purple {
+    border:0!important;
+    border-radius:0 18px 0 18px!important;
+    box-shadow:0 18px 38px rgba(72,38,138,.13)!important;
+}
+.purple {
+    background:linear-gradient(135deg,#4c1d95,#7e22ce)!important;
+}
+.step-badge {
+    background:#6d28d9!important;
+    border:0!important;
+    color:#fff!important;
+    border-radius:0 14px 0 14px!important;
+    box-shadow:0 10px 22px rgba(109,40,217,.25);
+}
+.step-dot {background:#d8b4fe!important;}
+.big-question {
+    color:#3b168f!important;
+    font-size:34px!important;
+}
+[data-testid="stFileUploader"] {
+    border:2px dashed #a855f7!important;
+    background:#fbf7ff!important;
+    border-radius:0 18px 0 18px!important;
+}
+.stTextInput input,.stTextArea textarea,
+.stSelectbox div[data-baseweb="select"] > div {
+    border-radius:0 12px 0 12px!important;
+    border-color:#d8b4fe!important;
+}
+@media (max-width:760px) {
+    .hero {min-height:unset;border-radius:0 18px 0 18px!important;}
+    .hero h1 {font-size:30px!important;}
+    .home-card,.action-card,.home-main,.summary-box {border-radius:0 16px 0 16px!important;}
 }
 </style>
 """, unsafe_allow_html=True)
@@ -132,47 +551,606 @@ def load_json(path, default):
     return default
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
 
-def fuente(tam, bold=True):
-    for f in ["assets/Montserrat-Bold.ttf" if bold else "assets/Montserrat-Regular.ttf", "assets/Montserrat-Bold.ttf", "arialbd.ttf", "arial.ttf"]:
-        try:
-            return ImageFont.truetype(f, tam)
-        except Exception:
-            pass
-    return ImageFont.load_default()
+def h(valor):
+    return html.escape(str(valor or ""), quote=True)
 
-def recortar(img, w_final, h_final):
-    img = ImageOps.exif_transpose(img).convert("RGB")
-    w, h = img.size
-    r_obj = w_final / h_final
-    r = w / h
-    if r > r_obj:
-        nw = int(h * r_obj)
-        x = (w - nw) // 2
-        img = img.crop((x, 0, x + nw, h))
-    else:
-        nh = int(w / r_obj)
-        y = (h - nh) // 2
-        img = img.crop((0, y, w, y + nh))
-    return img.resize((w_final, h_final))
+def h_lineas(valor):
+    return h(valor).replace("\n", "<br>")
 
-def wrap(texto, font, max_w):
-    d = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    palabras = str(texto or "").split()
-    lineas, actual = [], ""
-    for p in palabras:
-        prueba = actual + " " + p if actual else p
-        if d.textbbox((0, 0), prueba, font=font)[2] <= max_w:
-            actual = prueba
-        else:
-            if actual:
-                lineas.append(actual)
-            actual = p
-    if actual:
-        lineas.append(actual)
+def leer_secreto(nombre):
+    try:
+        return st.secrets.get(nombre) or os.getenv(nombre, "")
+    except Exception:
+        return os.getenv(nombre, "")
+
+def normalizar_usuario(usuario):
+    limpio = "".join(c for c in str(usuario or "").strip().lower() if c.isalnum() or c in ("_", "-", "."))
+    return limpio[:40]
+
+def hash_password(password, salt=None):
+    salt = salt or os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        str(password).encode("utf-8"),
+        salt.encode("utf-8"),
+        120_000
+    ).hex()
+    return salt, digest
+
+def verificar_password(password, salt, digest):
+    _, candidato = hash_password(password, salt)
+    return hmac.compare_digest(candidato, digest)
+
+def cargar_usuarios():
+    data = load_json(USERS_PATH, {"usuarios": {}})
+    if not isinstance(data, dict):
+        data = {"usuarios": {}}
+    if not isinstance(data.get("usuarios"), dict):
+        data["usuarios"] = {}
+    return data
+
+def guardar_usuarios(data):
+    save_json(USERS_PATH, data)
+
+def crear_usuario(usuario, password, nombre_negocio=""):
+    usuario = normalizar_usuario(usuario)
+    if len(usuario) < 3:
+        raise ValueError("El usuario debe tener al menos 3 caracteres.")
+    if len(str(password or "")) < 6:
+        raise ValueError("La contraseña debe tener al menos 6 caracteres.")
+
+    data = cargar_usuarios()
+    if usuario in data["usuarios"]:
+        raise ValueError("Ese usuario ya existe.")
+
+    salt, digest = hash_password(password)
+    data["usuarios"][usuario] = {
+        "salt": salt,
+        "password_hash": digest,
+        "nombre_negocio": str(nombre_negocio or "").strip(),
+        "creado": datetime.now().strftime("%Y-%m-%d %H:%M")
+    }
+    guardar_usuarios(data)
+    return usuario
+
+def autenticar_usuario(usuario, password):
+    usuario = normalizar_usuario(usuario)
+    data = cargar_usuarios()
+    registro = data["usuarios"].get(usuario)
+    if not registro:
+        return None
+    if verificar_password(password, registro.get("salt", ""), registro.get("password_hash", "")):
+        return usuario
+    return None
+
+def rutas_usuario(usuario):
+    usuario = normalizar_usuario(usuario)
+    carpeta = os.path.join(DATA_DIR, "cuentas", usuario)
+    os.makedirs(carpeta, exist_ok=True)
+    return (
+        os.path.join(carpeta, "perfil_negocio.json"),
+        os.path.join(carpeta, "historial.json"),
+    )
+
+def migrar_datos_iniciales(usuario):
+    profile_path, history_path = rutas_usuario(usuario)
+    if not os.path.exists(profile_path) and os.path.exists(os.path.join(DATA_DIR, "perfil_negocio.json")):
+        perfil_existente = load_json(os.path.join(DATA_DIR, "perfil_negocio.json"), {})
+        if isinstance(perfil_existente, dict) and perfil_existente:
+            save_json(profile_path, perfil_existente)
+    if not os.path.exists(history_path) and os.path.exists(os.path.join(DATA_DIR, "historial.json")):
+        historial_existente = load_json(os.path.join(DATA_DIR, "historial.json"), [])
+        if isinstance(historial_existente, list):
+            save_json(history_path, historial_existente)
+
+def cerrar_sesion():
+    for key in [
+        "auth_user",
+        "mostrar_creador",
+        "crear_step",
+        "ideas_sugeridas",
+        "descripcion_actual",
+        "descripcion_final",
+        "idea_elegida_desc",
+        "post_buffer",
+        "data",
+        "recraft_url",
+        "recraft_prompt",
+    ]:
+        st.session_state.pop(key, None)
+    st.rerun()
+
+def render_login():
+    st.markdown("""
+    <div class="hero login-hero">
+      <div class="brand-lockup">
+        <div class="brand-mark">D</div>
+        <div>
+          <h1>Dago</h1>
+          <p class="small">Entra o crea una cuenta para administrar tu contenido.</p>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_info, col_form = st.columns([0.95, 1.05], gap="large")
+    with col_info:
+        st.markdown("""
+        <div class="home-main">
+        <span class="card-kicker">Tu espacio de trabajo</span>
+        <h2>Contenido separado por cuenta</h2>
+        <p class="small">Cada usuario guarda su propio perfil, historial y piezas generadas. Ideal para empezar simple y luego crecer a muchos negocios.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+        <div class="home-card accent-teal">
+        <span class="card-kicker">Flujo</span>
+        <h3>Sube una foto real</h3>
+        <p>Dago usa la imagen del producto o local como base para editarla con Recraft.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_form:
+        tab_login, tab_registro = st.tabs(["Iniciar sesión", "Crear cuenta"])
+
+        with tab_login:
+            with st.form("login_form"):
+                usuario = st.text_input("Usuario")
+                password = st.text_input("Contraseña", type="password")
+                submit = st.form_submit_button("ENTRAR", use_container_width=True)
+
+            if submit:
+                auth_user = autenticar_usuario(usuario, password)
+                if auth_user:
+                    st.session_state["auth_user"] = auth_user
+                    st.rerun()
+                else:
+                    st.error("Usuario o contraseña incorrectos.")
+
+        with tab_registro:
+            with st.form("registro_form"):
+                nuevo_usuario = st.text_input("Usuario nuevo")
+                nombre_negocio = st.text_input("Nombre del negocio opcional")
+                nuevo_password = st.text_input("Contraseña", type="password")
+                confirmar_password = st.text_input("Confirmar contraseña", type="password")
+                crear = st.form_submit_button("CREAR CUENTA", use_container_width=True)
+
+            if crear:
+                if nuevo_password != confirmar_password:
+                    st.error("Las contraseñas no coinciden.")
+                else:
+                    try:
+                        auth_user = crear_usuario(nuevo_usuario, nuevo_password, nombre_negocio)
+                        migrar_datos_iniciales(auth_user)
+                        st.session_state["auth_user"] = auth_user
+                        st.success("Cuenta creada.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+
+def requerir_login():
+    if "auth_user" not in st.session_state:
+        render_login()
+        st.stop()
+    return st.session_state["auth_user"]
+
+@st.cache_resource(show_spinner=False)
+def crear_cliente_groq(api_key):
+    return Groq(api_key=api_key)
+
+def cliente_groq():
+    api_key = leer_secreto("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("Falta configurar GROQ_API_KEY en .streamlit/secrets.toml.")
+    return crear_cliente_groq(api_key)
+
+def pedir_json_ia(prompt, temperature=0.3):
+    try:
+        r = cliente_groq().chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            response_format={"type": "json_object"}
+        )
+        return json.loads(r.choices[0].message.content)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("La IA respondió en un formato inválido. Intenta generar de nuevo.") from exc
+    except Exception as exc:
+        raise RuntimeError(f"No pude conectar con la IA: {exc}") from exc
+
+def texto_corto(valor, limite=220):
+    texto = str(valor or "").strip()
+    return texto[:limite].strip()
+
+def tamano_recraft(formato_contenido):
+    return "768x1344" if formato_contenido == "Historia" else "1024x1024"
+
+def mensaje_error_recraft(response, data):
+    error = data.get("error") if isinstance(data, dict) else None
+    if isinstance(error, dict):
+        return error.get("message") or error.get("detail") or response.text[:300]
+    if error:
+        return str(error)
+    if isinstance(data, dict):
+        return data.get("message") or data.get("detail") or response.text[:300]
+    return response.text[:300]
+
+def extension_imagen(mime):
+    return {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+    }.get(mime, "png")
+
+def tamano_instagram(formato_contenido):
+    return INSTAGRAM_STORY_SIZE if formato_contenido == "Historia" else INSTAGRAM_POST_SIZE
+
+def preparar_canvas_instagram(img, formato_contenido):
+    target_w, target_h = tamano_instagram(formato_contenido)
+    fondo = ImageOps.fit(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
+    fitted = ImageOps.contain(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
+
+    fondo = fondo.filter(ImageFilter.GaussianBlur(22))
+    sombra = Image.new("RGB", (target_w, target_h), (20, 8, 45))
+    canvas = Image.blend(fondo, sombra, 0.22)
+
+    x = (target_w - fitted.width) // 2
+    y = (target_h - fitted.height) // 2
+    canvas.paste(fitted, (x, y))
+    return canvas
+
+def datos_clave_descripcion():
+    campos = [
+        ("Producto/servicio", st.session_state.get("promo_producto")),
+        ("Precio/oferta", st.session_state.get("promo_precio")),
+        ("Vigencia/fecha", st.session_state.get("promo_vigencia")),
+        ("Condición/dato clave", st.session_state.get("promo_condicion")),
+    ]
+    lineas = []
+    for etiqueta, valor in campos:
+        valor = str(valor or "").strip()
+        if valor:
+            lineas.append(f"{etiqueta}: {valor}")
     return lineas
+
+def descripcion_con_datos_clave(base):
+    texto = str(base or "").strip()
+    lineas_extra = []
+    for linea in datos_clave_descripcion():
+        etiqueta = linea.split(":", 1)[0]
+        if etiqueta not in texto:
+            lineas_extra.append(linea)
+    if lineas_extra:
+        return (texto + "\n" if texto else "") + "\n".join(lineas_extra)
+    return texto
+
+def asegurar_tamano_recraft(img):
+    w, h_img = img.size
+    escala_bajada = min(
+        1,
+        MAX_RECRAFT_IMAGE_SIDE / max(w, h_img),
+        (MAX_RECRAFT_IMAGE_PIXELS / max(w * h_img, 1)) ** 0.5,
+    )
+    if escala_bajada < 1:
+        nuevo_tamano = (max(1, int(w * escala_bajada)), max(1, int(h_img * escala_bajada)))
+        img = img.resize(nuevo_tamano, Image.Resampling.LANCZOS)
+
+    w, h_img = img.size
+    if min(w, h_img) >= MIN_RECRAFT_IMAGE_SIDE:
+        return img
+
+    escala_subida = MIN_RECRAFT_IMAGE_SIDE / max(1, min(w, h_img))
+    puede_escalar = (
+        max(w, h_img) * escala_subida <= MAX_RECRAFT_IMAGE_SIDE
+        and w * h_img * (escala_subida ** 2) <= MAX_RECRAFT_IMAGE_PIXELS
+    )
+
+    if puede_escalar:
+        nuevo_tamano = (
+            max(MIN_RECRAFT_IMAGE_SIDE, int(w * escala_subida)),
+            max(MIN_RECRAFT_IMAGE_SIDE, int(h_img * escala_subida)),
+        )
+        return img.resize(nuevo_tamano, Image.Resampling.LANCZOS)
+
+    canvas_w = max(w, MIN_RECRAFT_IMAGE_SIDE)
+    canvas_h = max(h_img, MIN_RECRAFT_IMAGE_SIDE)
+    lienzo = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
+    lienzo.paste(img, ((canvas_w - w) // 2, (canvas_h - h_img) // 2))
+    return lienzo
+
+def preparar_imagen_para_recraft(uploaded_file, formato_contenido):
+    try:
+        uploaded_file.seek(0)
+    except Exception:
+        pass
+
+    try:
+        with Image.open(uploaded_file) as original:
+            img = ImageOps.exif_transpose(original)
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            if img.mode == "RGBA":
+                fondo = Image.new("RGB", img.size, (255, 255, 255))
+                fondo.paste(img, mask=img.getchannel("A"))
+                img = fondo
+            else:
+                img = img.convert("RGB")
+    except Exception as exc:
+        raise RuntimeError("No pude leer la foto. Sube una imagen JPG, PNG o WEBP.") from exc
+
+    img = preparar_canvas_instagram(img, formato_contenido)
+    img = asegurar_tamano_recraft(img)
+
+    calidad = 92
+    buffer = io.BytesIO()
+    while True:
+        buffer.seek(0)
+        buffer.truncate(0)
+        img.save(buffer, format="JPEG", quality=calidad, optimize=True)
+        if buffer.tell() <= MAX_RECRAFT_IMAGE_BYTES or calidad <= 70:
+            break
+        calidad -= 6
+
+    while buffer.tell() > MAX_RECRAFT_IMAGE_BYTES and max(img.size) > MIN_RECRAFT_IMAGE_SIDE:
+        nuevo_tamano = (
+            max(MIN_RECRAFT_IMAGE_SIDE, int(img.width * 0.9)),
+            max(MIN_RECRAFT_IMAGE_SIDE, int(img.height * 0.9)),
+        )
+        if nuevo_tamano == img.size:
+            break
+        img = img.resize(nuevo_tamano, Image.Resampling.LANCZOS)
+        img = asegurar_tamano_recraft(img)
+        buffer.seek(0)
+        buffer.truncate(0)
+        img.save(buffer, format="JPEG", quality=76, optimize=True)
+
+    if buffer.tell() > MAX_RECRAFT_IMAGE_BYTES:
+        raise RuntimeError("La foto sigue siendo demasiado pesada para Recraft. Prueba con una imagen más liviana.")
+
+    return {
+        "bytes": buffer.getvalue(),
+        "filename": "producto_dago.jpg",
+        "mime": "image/jpeg",
+        "size": img.size,
+    }
+
+def normalizar_salida_instagram(image_bytes, formato_contenido):
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as original:
+            img = ImageOps.exif_transpose(original).convert("RGB")
+    except Exception:
+        return image_bytes, "image/png"
+
+    img = ImageOps.fit(img, tamano_instagram(formato_contenido), method=Image.Resampling.LANCZOS)
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=94, optimize=True)
+    return buffer.getvalue(), "image/jpeg"
+
+def prompt_recraft(perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0):
+    visual = data.get("direccion_visual", {})
+    if not isinstance(visual, dict):
+        visual = {}
+
+    rubro = texto_corto(perfil.get("rubro"), 80)
+    tono = texto_corto(perfil.get("tono"), 80)
+    publico = texto_corto(perfil.get("publico"), 160)
+    productos = texto_corto(perfil.get("productos"), 220)
+    material = texto_corto(perfil.get("material_disponible"), 220)
+    direccion = texto_corto(perfil.get("direccion"), 120) if mostrar_direccion else ""
+
+    gancho = texto_corto(data.get("gancho_visual") or data.get("titulo_post") or objetivo, 42)
+    subtitulo = texto_corto(data.get("subtitulo_visual") or visual.get("texto_en_imagen"), 70)
+    estilo = texto_corto(visual.get("estilo_visual"), 160)
+    layout = texto_corto(visual.get("tipo_layout"), 160)
+    foto_ideal = texto_corto(visual.get("foto_ideal") or data.get("idea_foto"), 220)
+    colores = texto_corto(visual.get("colores_recomendados"), 120)
+
+    formato = "vertical Instagram story 9:16" if formato_contenido == "Historia" else "square Instagram post 1:1"
+    variantes = [
+        "premium commercial ad, clean hierarchy, realistic product photography",
+        "modern editorial social media design, bold readable headline, elegant spacing",
+        "minimal high-end campaign, strong central product, refined contrast",
+        "fresh local business ad, warm realistic lighting, professional Instagram finish",
+    ]
+    estilo_variante = variantes[variante % len(variantes)]
+
+    direccion_linea = f'Small location text: "{direccion}"' if direccion else "No address text."
+    subtitulo_linea = f'Supporting text: "{subtitulo}"' if subtitulo else "No supporting text."
+
+    return f"""
+Create a professional, publish-ready {formato} for a small Chilean business.
+
+BUSINESS CONTEXT:
+Business type: {rubro}
+Brand tone: {tono}
+Target audience: {publico}
+Products/services: {productos}
+Available visual material: {material}
+
+CONTENT GOAL:
+Objective: {objetivo}
+User brief: {descripcion}
+
+VISUAL DIRECTION:
+Style: {estilo or estilo_variante}
+Layout: {layout}
+Ideal photo/content: {foto_ideal}
+Recommended colors: {colores or "white, purple accents, clean commercial palette"}
+Variant: {estilo_variante}
+
+TEXT THAT MUST APPEAR:
+Main headline: "{gancho}"
+{subtitulo_linea}
+{direccion_linea}
+
+STRICT RULES:
+- Use Spanish text exactly as provided above.
+- Do not invent prices, discounts, schedules, stock, testimonials, events, logos or brand names.
+- No fake logo.
+- No watermark.
+- No random extra text.
+- No misspelled text.
+- Make the headline large and readable.
+- Keep the design clean, modern and commercial.
+- Make it look like a designer-made Instagram asset ready to publish.
+""".strip()
+
+def prompt_edicion_recraft(perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0):
+    visual = data.get("direccion_visual", {})
+    if not isinstance(visual, dict):
+        visual = {}
+
+    formato = "Instagram story 9:16" if formato_contenido == "Historia" else "Instagram square post 1:1"
+    gancho = texto_corto(data.get("gancho_visual") or data.get("titulo_post") or objetivo, 38)
+    subtitulo = texto_corto(data.get("subtitulo_visual") or visual.get("texto_en_imagen"), 58)
+    direccion = texto_corto(perfil.get("direccion"), 80) if mostrar_direccion else ""
+    estilo = texto_corto(visual.get("estilo_visual"), 90)
+    rubro = texto_corto(perfil.get("rubro"), 60)
+    productos = texto_corto(perfil.get("productos"), 120)
+    brief = texto_corto(descripcion, 160)
+    variantes = [
+        "clean premium commercial ad",
+        "modern editorial social media design",
+        "minimal product-focused campaign",
+        "fresh local business ad with warm lighting",
+    ]
+
+    prompt = f"""
+Edit the uploaded real product/business photo into a professional {formato}.
+Preserve the exact product, food, service and identity from the photo. Do not replace it.
+Improve lighting, contrast, background, composition and commercial polish.
+Business: {rubro}. Products/services: {productos}.
+Goal: {objetivo}. Brief: {brief}.
+Style: {estilo or variantes[variante % len(variantes)]}.
+Readable Spanish headline: "{gancho}".
+Supporting text: "{subtitulo}".
+{f'Address text: "{direccion}".' if direccion else 'No address text.'}
+Rules: no fake logo, no watermark, no random extra text, no invented prices, no fake discounts, no fake stock. If text is difficult, prioritize a clean edited product photo with space for caption.
+""".strip()
+    return prompt[:950]
+
+def generar_imagen_recraft(perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0):
+    api_key = leer_secreto("RECRAFT_API_KEY")
+    if not api_key:
+        raise RuntimeError("Falta configurar RECRAFT_API_KEY en .streamlit/secrets.toml.")
+
+    prompt = prompt_recraft(
+        perfil,
+        data,
+        descripcion,
+        objetivo,
+        formato_contenido,
+        mostrar_direccion=mostrar_direccion,
+        variante=variante,
+    )
+
+    try:
+        response = requests.post(
+            RECRAFT_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "prompt": prompt,
+                "model": RECRAFT_MODEL,
+                "size": tamano_recraft(formato_contenido),
+                "n": 1,
+                "response_format": "url",
+            },
+            timeout=120,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"No pude conectar con Recraft: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Recraft rechazó la generación: {mensaje_error_recraft(response, payload)}")
+
+    try:
+        image_url = payload["data"][0]["url"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("Recraft no devolvió una imagen válida.") from exc
+
+    try:
+        image_response = requests.get(image_url, timeout=120)
+        image_response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Recraft generó la imagen, pero no pude descargarla: {exc}") from exc
+
+    image_bytes, mime = normalizar_salida_instagram(image_response.content, formato_contenido)
+    return image_bytes, image_url, prompt, mime
+
+def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0, fuerza=0.35):
+    api_key = leer_secreto("RECRAFT_API_KEY")
+    if not api_key:
+        raise RuntimeError("Falta configurar RECRAFT_API_KEY en .streamlit/secrets.toml.")
+
+    prompt = prompt_edicion_recraft(
+        perfil,
+        data,
+        descripcion,
+        objetivo,
+        formato_contenido,
+        mostrar_direccion=mostrar_direccion,
+        variante=variante,
+    )
+
+    try:
+        response = requests.post(
+            RECRAFT_IMAGE_TO_IMAGE_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            files={
+                "image": (
+                    foto_info["filename"],
+                    foto_info["bytes"],
+                    foto_info["mime"],
+                )
+            },
+            data={
+                "prompt": prompt,
+                "strength": str(fuerza),
+                "n": "1",
+                "model": RECRAFT_EDIT_MODEL,
+                "response_format": "url",
+            },
+            timeout=120,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"No pude conectar con Recraft: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Recraft rechazó la edición: {mensaje_error_recraft(response, payload)}")
+
+    try:
+        image_url = payload["data"][0]["url"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("Recraft no devolvió una imagen editada válida.") from exc
+
+    try:
+        image_response = requests.get(image_url, timeout=120)
+        image_response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Recraft editó la imagen, pero no pude descargarla: {exc}") from exc
+
+    image_bytes, mime = normalizar_salida_instagram(image_response.content, formato_contenido)
+    return image_bytes, image_url, prompt, mime
 
 def generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial):
     prompt = f"""
@@ -194,7 +1172,7 @@ INFORMACIÓN ENTREGADA POR EL USUARIO:
 {descripcion}
 
 HISTORIAL RECIENTE:
-{json.dumps(historial[-8:], ensure_ascii=False)}
+{json.dumps(historial[-HISTORY_CONTEXT_ITEMS:], ensure_ascii=False)}
 
 DEVUELVE SOLO JSON VÁLIDO:
 {{
@@ -294,16 +1272,18 @@ Antes de responder revisa:
 
 Devuelve SOLO JSON válido.
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.28,
-        response_format={"type": "json_object"}
-    )
-    data = json.loads(r.choices[0].message.content)
+    data = pedir_json_ia(prompt, temperature=0.28)
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(data.get("direccion_visual"), dict):
+        data["direccion_visual"] = {}
     if not isinstance(data.get("hashtags"), list):
         data["hashtags"] = ["#NegocioLocal", "#Chile"]
-    data["hashtags"] = [h if str(h).startswith("#") else "#" + str(h).replace(" ", "") for h in data["hashtags"]]
+    data["hashtags"] = [
+        h if str(h).startswith("#") else "#" + str(h).replace(" ", "")
+        for h in data["hashtags"]
+        if str(h).strip()
+    ]
     return data
 
 def generar_plan_semanal(perfil, historial):
@@ -323,7 +1303,7 @@ Perfil:
 {json.dumps(perfil, ensure_ascii=False)}
 
 Historial:
-{json.dumps(historial[-8:], ensure_ascii=False)}
+{json.dumps(historial[-HISTORY_CONTEXT_ITEMS:], ensure_ascii=False)}
 
 Reglas:
 - 4 publicaciones máximo.
@@ -333,13 +1313,12 @@ Reglas:
 - Ideas concretas y realizables para un dueño ocupado.
 - Si no hay material visual específico, propone contenido fácil: servicio destacado, recordatorio de reservas, horario, beneficios, preguntas frecuentes o promoción simple.
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.4,
-        response_format={"type": "json_object"}
-    )
-    return json.loads(r.choices[0].message.content)
+    data = pedir_json_ia(prompt, temperature=0.4)
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(data.get("plan"), list):
+        data["plan"] = []
+    return data
 
 
 
@@ -360,7 +1339,7 @@ OBJETIVO:
 {objetivo}
 
 HISTORIAL:
-{json.dumps(historial[-8:], ensure_ascii=False)}
+{json.dumps(historial[-HISTORY_CONTEXT_ITEMS:], ensure_ascii=False)}
 
 DEVUELVE SOLO JSON:
 {{
@@ -452,129 +1431,12 @@ Entrega 4 ideas distintas:
 
 Devuelve SOLO JSON válido.
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.25,
-        response_format={"type": "json_object"}
-    )
-    data = json.loads(r.choices[0].message.content)
+    data = pedir_json_ia(prompt, temperature=0.25)
+    if not isinstance(data, dict):
+        data = {}
     if "ideas" not in data or not isinstance(data["ideas"], list):
         data["ideas"] = []
     return data
-
-def crear_imagen_base(perfil, data, foto=None, variante=0, formato_contenido='Publicación', mostrar_direccion=False):
-    rubro = perfil.get("rubro", "").lower()
-
-    if "barber" in rubro:
-        fondo, acento = (16, 16, 18), (210, 170, 90)
-    elif "cafeter" in rubro or "comida" in rubro or "delivery" in rubro or "restaurante" in rubro:
-        fondo, acento = (255, 248, 236), (190, 105, 35)
-    elif "belleza" in rubro or "uñas" in rubro:
-        fondo, acento = (252, 240, 246), (150, 80, 120)
-    else:
-        fondo, acento = (248, 245, 255), MORADO
-
-    ancho_final = 1080
-    alto_final = 1920 if formato_contenido == "Historia" else 1080
-
-    img = Image.new("RGB", (ancho_final, alto_final), fondo)
-    d = ImageDraw.Draw(img)
-
-    gancho = data.get("gancho_visual", "").upper().strip()
-    subtitulo = data.get("subtitulo_visual", "").strip()
-
-    if len(gancho) > 34:
-        gancho = gancho[:34].strip()
-
-    f_gancho = fuente(82, True)
-    f_sub = fuente(38, True)
-
-    layout = variante % 4
-
-    if foto:
-        foto_base = Image.open(foto)
-
-        if layout == 0:
-            # Foto arriba grande + bloque inferior
-            main = recortar(foto_base, ancho_final, 1180 if formato_contenido == 'Historia' else 700)
-            img.paste(main, (0, 0))
-            d.rectangle((0, 1160 if formato_contenido == 'Historia' else 690, ancho_final, alto_final), fill=fondo)
-            x, y = 70, 1260 if formato_contenido == 'Historia' else 760
-            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
-            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
-
-        elif layout == 1:
-            # Foto completa + franja oscura inferior
-            main = recortar(foto_base, ancho_final, alto_final)
-            img.paste(main, (0, 0))
-            overlay = Image.new("RGBA", (ancho_final, alto_final), (0,0,0,0))
-            od = ImageDraw.Draw(overlay)
-            od.rectangle((0, 1260 if formato_contenido == 'Historia' else 650, ancho_final, alto_final), fill=(0,0,0,210))
-            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-            d = ImageDraw.Draw(img)
-            x, y = 70, 1340 if formato_contenido == 'Historia' else 735
-            text_color = (255,255,255)
-            sub_color = (225,225,225)
-
-        elif layout == 2:
-            # Fondo claro, foto circular/rounded centrada
-            d.rectangle((0, 0, ancho_final, alto_final), fill=fondo)
-            main = recortar(foto_base, 850, 620)
-            mask = Image.new("L", (850,620), 0)
-            md = ImageDraw.Draw(mask)
-            md.rounded_rectangle((0,0,850,620), radius=45, fill=255)
-            img.paste(main, (115, 90), mask)
-            x, y = 90, 1260 if formato_contenido == 'Historia' else 760
-            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
-            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
-
-        else:
-            # Split editorial
-            d.rectangle((0, 0, ancho_final, alto_final), fill=fondo)
-            main = recortar(foto_base, 540, alto_final)
-            img.paste(main, (540, 0))
-            x, y = 65, 620 if formato_contenido == 'Historia' else 330
-            text_color = (20,20,24) if sum(fondo) > 450 else (250,250,250)
-            sub_color = (70,70,75) if sum(fondo) > 450 else (225,225,225)
-
-    else:
-        d.rounded_rectangle((55,55,1025,alto_final-55), radius=42, outline=acento, width=8)
-        x, y = 85, 760 if formato_contenido == 'Historia' else 390
-        text_color = (20,20,24)
-        sub_color = (70,70,75)
-
-    # Texto limpio, sin nombre del negocio ni botón
-    for l in wrap(gancho, f_gancho, 900 if layout != 3 else 430)[:2]:
-        d.text((x, y), l, font=f_gancho, fill=text_color)
-        y += 88
-
-    y += 10
-
-    for l in wrap(subtitulo, f_sub, 880 if layout != 3 else 430)[:2]:
-        d.text((x, y), l, font=f_sub, fill=sub_color)
-        y += 44
-
-    # Línea/acento visual discreto
-    d.rounded_rectangle((x, min(y + 28, alto_final-65), x + 180, min(y + 40, alto_final-53)), radius=8, fill=acento)
-
-    if mostrar_direccion and perfil.get("direccion"):
-        marca = perfil.get("direccion", "").strip()
-        if marca:
-            f_dir = fuente(24, True)
-            bbox = d.textbbox((0, 0), marca, font=f_dir)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-            x_dir = ancho_final - tw - 55
-            y_dir = alto_final - th - 45
-            d.rounded_rectangle(
-                (x_dir - 22, y_dir - 12, x_dir + tw + 22, y_dir + th + 12),
-                radius=22,
-                fill=(255, 255, 255)
-            )
-            d.text((x_dir, y_dir), marca, font=f_dir, fill=(35, 25, 55))
-
-    return img
-
 
 perfil_default = {
     "nombre": "",
@@ -589,15 +1451,35 @@ perfil_default = {
     "direccion": ""
 }
 
-perfil = load_json(PROFILE_PATH, perfil_default)
+usuario_actual = requerir_login()
+PROFILE_PATH, HISTORY_PATH = rutas_usuario(usuario_actual)
+
+perfil_guardado = load_json(PROFILE_PATH, {})
+perfil = {**perfil_default, **perfil_guardado} if isinstance(perfil_guardado, dict) else perfil_default.copy()
+
 historial = load_json(HISTORY_PATH, [])
+if not isinstance(historial, list):
+    historial = []
+historial = [item for item in historial if isinstance(item, dict)]
 
 st.markdown("""
 <div class="hero">
-<h1>Dago</h1>
-<p class="small">Tu Community Manager en un click.</p>
+  <div class="brand-lockup">
+    <div class="brand-mark">D</div>
+    <div>
+      <h1>Dago</h1>
+      <p class="small">Contenido listo para publicar con fotos reales del negocio.</p>
+    </div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
+
+top_user_col, top_logout_col = st.columns([0.82, 0.18])
+with top_user_col:
+    st.markdown(f"<p class='soft-note'>Sesión activa: <b>{h(usuario_actual)}</b></p>", unsafe_allow_html=True)
+with top_logout_col:
+    if st.button("CERRAR SESIÓN", use_container_width=True):
+        cerrar_sesion()
 
 
 
@@ -617,12 +1499,11 @@ def render_creador():
 
     step = st.session_state["crear_step"]
     generar = False
-    foto = None
 
     st.markdown("## Crear contenido con Dago")
 
     if step < 4:
-        st.markdown(f"<p class='soft-note'>Paso {step} de 4</p>", unsafe_allow_html=True)
+        st.markdown(f"<div class='step-badge'><span class='step-dot'></span>Paso {step} de 4</div>", unsafe_allow_html=True)
 
         if step == 1:
             st.markdown("<div class='big-question'>¿Qué quieres crear?</div>", unsafe_allow_html=True)
@@ -696,17 +1577,16 @@ def render_creador():
                 label_visibility="collapsed"
             )
 
-            if objetivo == "Vender una promoción":
-                st.markdown("<div class='step-title'>Datos de la promoción</div>", unsafe_allow_html=True)
-                st.markdown("<p class='soft-note'>Para que Dago no invente ofertas, completa lo que tengas. Si algo no aplica, déjalo vacío.</p>", unsafe_allow_html=True)
+            st.markdown("<div class='step-title'>Datos clave opcionales</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Agrega precio, vigencia o condiciones para que Dago no invente nada. Puedes completarlo antes o después de pedir ideas.</p>", unsafe_allow_html=True)
 
-                pc1, pc2 = st.columns(2)
-                with pc1:
-                    st.text_input("Producto o servicio en promo", key="promo_producto", placeholder="Ej: café + medialuna")
-                    st.text_input("Precio real", key="promo_precio", placeholder="Ej: $4.500")
-                with pc2:
-                    st.text_input("Vigencia", key="promo_vigencia", placeholder="Ej: hasta las 10:00 / solo hoy")
-                    st.text_input("Condición", key="promo_condicion", placeholder="Ej: retiro en local / pagando en efectivo")
+            pc1, pc2 = st.columns(2)
+            with pc1:
+                st.text_input("Producto o servicio", key="promo_producto", placeholder="Ej: café + medialuna")
+                st.text_input("Precio u oferta", key="promo_precio", placeholder="Ej: $4.500 / 2x1 / desde $10.000")
+            with pc2:
+                st.text_input("Vigencia, fecha u horario", key="promo_vigencia", placeholder="Ej: hasta las 10:00 / solo hoy")
+                st.text_input("Condición o dato clave", key="promo_condicion", placeholder="Ej: retiro en local / pagando en efectivo")
 
             b1, b2 = st.columns(2)
             with b1:
@@ -715,32 +1595,24 @@ def render_creador():
                         st.error("Primero guarda el perfil del negocio.")
                     else:
                         with st.spinner("Buscando ideas para este negocio..."):
-                            st.session_state["ideas_sugeridas"] = generar_ideas_con_ia(
-                                perfil,
-                                formato_contenido,
-                                objetivo,
-                                historial
-                            )
-                        st.rerun()
+                            try:
+                                st.session_state["ideas_sugeridas"] = generar_ideas_con_ia(
+                                    perfil,
+                                    formato_contenido,
+                                    objetivo,
+                                    historial
+                                )
+                                st.rerun()
+                            except RuntimeError as exc:
+                                st.error(str(exc))
 
             with b2:
                 if st.button("USAR MI TEXTO", use_container_width=True):
                     base = st.session_state.get("descripcion_actual", "").strip()
-                    if objetivo == "Vender una promoción":
-                        extras = []
-                        if st.session_state.get("promo_producto"):
-                            extras.append(f"Producto/servicio en promoción: {st.session_state.get('promo_producto')}")
-                        if st.session_state.get("promo_precio"):
-                            extras.append(f"Precio real: {st.session_state.get('promo_precio')}")
-                        if st.session_state.get("promo_vigencia"):
-                            extras.append(f"Vigencia: {st.session_state.get('promo_vigencia')}")
-                        if st.session_state.get("promo_condicion"):
-                            extras.append(f"Condición: {st.session_state.get('promo_condicion')}")
-                        if extras:
-                            base = (base + "\n" if base else "") + "\n".join(extras)
+                    base = descripcion_con_datos_clave(base)
 
                     if not base:
-                        st.error("Escribe algo, pide ideas o completa datos de la promoción.")
+                        st.error("Escribe algo, pide ideas o completa algún dato clave.")
                     else:
                         st.session_state["descripcion_final"] = base
                         st.session_state["crear_step"] = 4
@@ -761,21 +1633,7 @@ def render_creador():
                     with cols[i]:
                         texto_boton = f"{titulo}\n\n{razon}\n\n{desc[:140]}..."
                         if st.button(texto_boton, key=f"idea_click_{i}", use_container_width=True):
-                            promo_extra = []
-                            if objetivo == "Vender una promoción":
-                                if st.session_state.get("promo_producto"):
-                                    promo_extra.append(f"Producto/servicio en promoción: {st.session_state.get('promo_producto')}")
-                                if st.session_state.get("promo_precio"):
-                                    promo_extra.append(f"Precio real: {st.session_state.get('promo_precio')}")
-                                if st.session_state.get("promo_vigencia"):
-                                    promo_extra.append(f"Vigencia: {st.session_state.get('promo_vigencia')}")
-                                if st.session_state.get("promo_condicion"):
-                                    promo_extra.append(f"Condición: {st.session_state.get('promo_condicion')}")
-
-                            final_desc = desc
-                            if promo_extra:
-                                final_desc = final_desc + "\n" + "\n".join(promo_extra)
-
+                            final_desc = descripcion_con_datos_clave(desc)
                             st.session_state["idea_elegida_desc"] = desc
                             st.session_state["descripcion_final"] = final_desc
                             st.session_state["crear_step"] = 4
@@ -796,23 +1654,47 @@ def render_creador():
             st.markdown("## Resumen")
             st.markdown(f"""
             <div class='summary-box'>
-            <b>Formato:</b> {formato_contenido}<br>
-            <b>Objetivo:</b> {objetivo}<br>
-            <b>Idea:</b> {descripcion}
+            <b>Formato:</b> {h(formato_contenido)}<br>
+            <b>Objetivo:</b> {h(objetivo)}<br>
+            <b>Idea:</b> {h_lineas(descripcion)}
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("<div class='step-title'>Sube una foto opcional</div>", unsafe_allow_html=True)
+            st.markdown("<div class='step-title'>Datos comerciales</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Puedes ajustar estos datos antes de generar la imagen final.</p>", unsafe_allow_html=True)
+            dc1, dc2 = st.columns(2)
+            with dc1:
+                st.text_input("Producto o servicio", key="promo_producto")
+                st.text_input("Precio u oferta", key="promo_precio")
+            with dc2:
+                st.text_input("Vigencia, fecha u horario", key="promo_vigencia")
+                st.text_input("Condición o dato clave", key="promo_condicion")
 
-            foto = st.file_uploader(
-                "Foto",
-                type=["jpg","jpeg","png","webp"],
+            st.markdown("<div class='step-title'>Foto del producto o local</div>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Sube una foto real. Dago la usará como base y Recraft la editará para que se vea más publicable.</p>", unsafe_allow_html=True)
+
+            foto_producto = st.file_uploader(
+                "Foto del producto o local",
+                type=["jpg", "jpeg", "png", "webp"],
                 label_visibility="collapsed",
-                key="foto_crear"
+                key="foto_producto_recraft"
             )
 
+            if foto_producto:
+                st.image(foto_producto, caption="Foto base para editar", use_container_width=True)
+
+            fuerza_edicion = st.slider(
+                "Cambio visual",
+                min_value=0.15,
+                max_value=0.75,
+                value=st.session_state.get("fuerza_edicion", 0.35),
+                step=0.05,
+                help="Más bajo conserva más la foto original. Más alto deja que Recraft rediseñe más la escena."
+            )
+            st.session_state["fuerza_edicion"] = fuerza_edicion
+
             mostrar_dir = st.checkbox(
-                "Agregar dirección como marca de agua",
+                "Incluir dirección en la imagen",
                 value=st.session_state.get("mostrar_direccion", False)
             )
             st.session_state["mostrar_direccion"] = mostrar_dir
@@ -832,70 +1714,94 @@ def render_creador():
             st.markdown("## Resultado")
 
             if generar:
+                descripcion_generacion = descripcion_con_datos_clave(descripcion)
                 if not perfil.get("nombre"):
                     st.error("Primero guarda el perfil del negocio.")
-                elif not descripcion.strip():
+                elif not descripcion_generacion.strip():
                     st.error("Escribe qué quieres comunicar.")
+                elif not foto_producto:
+                    st.error("Sube una foto real del producto o local para que Recraft la edite.")
                 else:
                     with st.spinner("Dago está preparando tu contenido..."):
-                        data = generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial)
                         st.session_state["design_variant"] = 0
-                        st.session_state["last_foto"] = foto
+                        try:
+                            foto_info = preparar_imagen_para_recraft(foto_producto, formato_contenido)
+                            data = generar_con_ia(perfil, descripcion_generacion, objetivo, formato_contenido, historial)
+                            imagen, recraft_url, recraft_prompt, post_mime = generar_edicion_recraft(
+                                foto_info,
+                                perfil,
+                                data,
+                                descripcion_generacion,
+                                objetivo,
+                                formato_contenido,
+                                mostrar_dir,
+                                st.session_state["design_variant"],
+                                fuerza_edicion,
+                            )
+                        except RuntimeError as exc:
+                            st.error(str(exc))
+                            return
                         st.session_state["last_formato"] = formato_contenido
+                        st.session_state["last_objetivo"] = objetivo
+                        st.session_state["last_descripcion"] = descripcion_generacion
                         st.session_state["last_mostrar_direccion"] = mostrar_dir
+                        st.session_state["last_foto_info"] = foto_info
+                        st.session_state["last_fuerza_edicion"] = fuerza_edicion
 
-                        post = crear_imagen_base(
-                            perfil,
-                            data,
-                            foto,
-                            st.session_state["design_variant"],
-                            formato_contenido,
-                            mostrar_dir
-                        )
-
-                        buffer = io.BytesIO()
-                        post.save(buffer, format="PNG")
-                        buffer.seek(0)
-
-                        st.session_state["post_buffer"] = buffer.getvalue()
+                        st.session_state["post_buffer"] = imagen
                         st.session_state["data"] = data
+                        st.session_state["recraft_url"] = recraft_url
+                        st.session_state["recraft_prompt"] = recraft_prompt
+                        st.session_state["post_mime"] = post_mime
 
                         historial.append({
                             "fecha_creacion": datetime.now().strftime("%Y-%m-%d %H:%M"),
                             "formato": formato_contenido,
                             "tipo": objetivo,
-                            "descripcion": descripcion,
+                            "descripcion": descripcion_generacion,
                             "dia_recomendado": data.get("dia_recomendado",""),
                             "hora_recomendada": data.get("hora_recomendada",""),
                             "gancho": data.get("gancho_visual","")
                         })
+                        del historial[:-MAX_HISTORY_ITEMS]
                         save_json(HISTORY_PATH, historial)
 
             if "post_buffer" in st.session_state:
                 cbtn1, cbtn2 = st.columns(2)
 
                 with cbtn1:
-                    if st.button("REHACER DISEÑO", use_container_width=True):
+                    if st.button("REHACER EN RECRAFT", use_container_width=True):
                         st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
-                        post = crear_imagen_base(
-                            perfil,
-                            st.session_state["data"],
-                            st.session_state.get("last_foto"),
-                            st.session_state["design_variant"],
-                            st.session_state.get("last_formato", "Publicación"),
-                            st.session_state.get("last_mostrar_direccion", False)
-                        )
-                        buffer = io.BytesIO()
-                        post.save(buffer, format="PNG")
-                        buffer.seek(0)
-                        st.session_state["post_buffer"] = buffer.getvalue()
+                        with st.spinner("Recraft está creando otro diseño..."):
+                            try:
+                                foto_info = st.session_state.get("last_foto_info")
+                                if not foto_info:
+                                    raise RuntimeError("Sube una foto y genera de nuevo antes de rehacer el diseño.")
+                                imagen, recraft_url, recraft_prompt, post_mime = generar_edicion_recraft(
+                                    foto_info,
+                                    perfil,
+                                    st.session_state["data"],
+                                    st.session_state.get("last_descripcion", ""),
+                                    st.session_state.get("last_objetivo", ""),
+                                    st.session_state.get("last_formato", "Publicación"),
+                                    st.session_state.get("last_mostrar_direccion", False),
+                                    st.session_state["design_variant"],
+                                    st.session_state.get("last_fuerza_edicion", 0.35),
+                                )
+                                st.session_state["post_buffer"] = imagen
+                                st.session_state["recraft_url"] = recraft_url
+                                st.session_state["recraft_prompt"] = recraft_prompt
+                                st.session_state["post_mime"] = post_mime
+                            except RuntimeError as exc:
+                                st.error(str(exc))
 
                 with cbtn2:
+                    post_mime = st.session_state.get("post_mime", "image/png")
                     st.download_button(
                         "DESCARGAR",
                         data=st.session_state["post_buffer"],
-                        file_name=f"contenido_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
+                        file_name=f"contenido_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{extension_imagen(post_mime)}",
+                        mime=post_mime,
                         use_container_width=True
                     )
 
@@ -904,32 +1810,37 @@ def render_creador():
             if "data" in st.session_state:
                 data = st.session_state["data"]
                 visual = data.get("direccion_visual", {})
+                if not isinstance(visual, dict):
+                    visual = {}
+                hashtags = data.get("hashtags", [])
+                if not isinstance(hashtags, list):
+                    hashtags = [hashtags]
 
                 st.markdown("### Texto principal")
                 if st.session_state.get("last_formato") == "Historia":
-                    st.markdown(f"<div class='card'>{data.get('historia_instagram','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='card'>{h_lineas(data.get('historia_instagram',''))}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='card'>{data.get('caption_instagram','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='card'>{h_lineas(data.get('caption_instagram',''))}</div>", unsafe_allow_html=True)
 
                 st.markdown("### WhatsApp")
-                st.markdown(f"<div class='card'>{data.get('mensaje_whatsapp','')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card'>{h_lineas(data.get('mensaje_whatsapp',''))}</div>", unsafe_allow_html=True)
 
                 st.markdown("### Dirección visual sugerida")
                 st.markdown(f"""
                 <div class="purple">
-                <b>Foto ideal:</b> {visual.get('foto_ideal','')}<br>
-                <b>Layout:</b> {visual.get('tipo_layout','')}<br>
-                <b>Texto:</b> {visual.get('texto_en_imagen','')}<br>
-                <b>Evitar:</b> {visual.get('que_evitar','')}<br>
-                <b>Idea foto:</b> {data.get('idea_foto','')}
+                <b>Foto ideal:</b> {h_lineas(visual.get('foto_ideal',''))}<br>
+                <b>Layout:</b> {h_lineas(visual.get('tipo_layout',''))}<br>
+                <b>Texto:</b> {h_lineas(visual.get('texto_en_imagen',''))}<br>
+                <b>Evitar:</b> {h_lineas(visual.get('que_evitar',''))}<br>
+                <b>Idea foto:</b> {h_lineas(data.get('idea_foto',''))}
                 </div>
                 """, unsafe_allow_html=True)
 
                 st.markdown("### Cuándo subirlo")
-                st.markdown(f"<div class='card'><b>{data.get('dia_recomendado','')}</b> a las <b>{data.get('hora_recomendada','')}</b><br>{data.get('motivo_horario','')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card'><b>{h(data.get('dia_recomendado',''))}</b> a las <b>{h(data.get('hora_recomendada',''))}</b><br>{h_lineas(data.get('motivo_horario',''))}</div>", unsafe_allow_html=True)
 
                 st.markdown("### Hashtags")
-                st.markdown(f"<div class='card'>{' '.join(data.get('hashtags', []))}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card'>{h(' '.join(str(tag) for tag in hashtags))}</div>", unsafe_allow_html=True)
 
 
 
@@ -949,7 +1860,7 @@ with tab_inicio:
         render_creador()
 
     else:
-        st.markdown("## Inicio")
+        st.markdown("## Panel de control")
 
         if perfil.get("nombre"):
             negocio = perfil.get("nombre")
@@ -958,13 +1869,15 @@ with tab_inicio:
 
             st.markdown(f"""
             <div class="home-main">
-            <h2>Hola, {negocio}</h2>
-            <p class="small">Dago está listo para crear contenido para tu {rubro.lower()} con tono {tono.lower()}.</p>
+            <span class="card-kicker">Negocio activo</span>
+            <h2>Hola, {h(negocio)}</h2>
+            <p class="small">Dago está listo para crear contenido para tu {h(str(rubro).lower())} con tono {h(str(tono).lower())}.</p>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
             <div class="home-main">
+            <span class="card-kicker">Primer paso</span>
             <h2>Configura tu negocio</h2>
             <p class="small">Completa el perfil para que Dago pueda crear ideas, publicaciones e historias personalizadas.</p>
             </div>
@@ -973,6 +1886,12 @@ with tab_inicio:
         cta1, cta2 = st.columns([1,1])
 
         with cta1:
+            st.markdown("""
+            <div class="action-card action-primary">
+            <b>Crear una pieza nueva</b>
+            <span>Sube una foto real, define el objetivo y deja que Dago prepare texto + edición visual.</span>
+            </div>
+            """, unsafe_allow_html=True)
             if st.button("CREAR CONTENIDO AHORA", use_container_width=True):
                 st.session_state["mostrar_creador"] = True
                 st.session_state["crear_step"] = 1
@@ -985,38 +1904,51 @@ with tab_inicio:
                 st.rerun()
 
         with cta2:
+            st.markdown("""
+            <div class="action-card action-secondary">
+            <b>Ordenar la semana</b>
+            <span>Genera una guía simple de qué publicar, cuándo hacerlo y con qué intención.</span>
+            </div>
+            """, unsafe_allow_html=True)
             if st.button("GENERAR PLAN SEMANAL", use_container_width=True):
                 if not perfil.get("nombre"):
                     st.error("Primero guarda el perfil.")
                 else:
                     with st.spinner("Preparando plan semanal..."):
-                        st.session_state["plan"] = generar_plan_semanal(perfil, historial)
+                        try:
+                            st.session_state["plan"] = generar_plan_semanal(perfil, historial)
+                        except RuntimeError as exc:
+                            st.error(str(exc))
 
         c1, c2, c3 = st.columns(3)
 
         with c1:
             st.markdown(f"""
-            <div class="home-card">
+            <div class="home-card accent-teal">
+            <span class="card-kicker">Calendario</span>
             <h3>Próxima idea</h3>
-            <p>{perfil.get('dias_publicacion','Define tus días')}</p>
-            <b>{perfil.get('horario_preferido','19:00')}</b>
+            <p>{h_lineas(perfil.get('dias_publicacion','Define tus días'))}</p>
+            <span class="metric-value">{h(perfil.get('horario_preferido','19:00'))}</span>
             </div>
             """, unsafe_allow_html=True)
 
         with c2:
             st.markdown(f"""
-            <div class="home-card">
+            <div class="home-card accent-amber">
+            <span class="card-kicker">Historial</span>
             <h3>Contenido creado</h3>
-            <p><b>{len(historial)}</b> piezas guardadas</p>
+            <span class="metric-value">{len(historial)}</span>
+            <p>piezas guardadas</p>
             </div>
             """, unsafe_allow_html=True)
 
         with c3:
-            ultima = historial[-1]["gancho"] if historial else "Aún no hay ideas"
+            ultima = historial[-1].get("gancho", "Aún no hay ideas") if historial else "Aún no hay ideas"
             st.markdown(f"""
-            <div class="home-card">
+            <div class="home-card accent-rose">
+            <span class="card-kicker">Último resultado</span>
             <h3>Última idea</h3>
-            <p>{ultima}</p>
+            <p>{h_lineas(ultima)}</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -1025,17 +1957,17 @@ with tab_inicio:
             st.markdown("## Plan recomendado")
             st.markdown(f"""
             <div class="home-main">
-            <b>{plan.get('resumen','')}</b><br>
-            <span class="small">{plan.get('recomendacion_general','')}</span>
+            <b>{h_lineas(plan.get('resumen',''))}</b><br>
+            <span class="small">{h_lineas(plan.get('recomendacion_general',''))}</span>
             </div>
             """, unsafe_allow_html=True)
 
             for item in plan.get("plan", []):
                 st.markdown(f"""
                 <div class="home-card">
-                <b>{item.get('dia')} · {item.get('hora')}</b><br>
-                <b>{item.get('tipo')}</b>: {item.get('idea')}<br>
-                <span class="small">{item.get('objetivo')}</span>
+                <b>{h(item.get('dia'))} · {h(item.get('hora'))}</b><br>
+                <b>{h(item.get('tipo'))}</b>: {h_lineas(item.get('idea'))}<br>
+                <span class="small">{h_lineas(item.get('objetivo'))}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -1067,4 +1999,4 @@ with tab_historial:
         st.info("Todavía no hay publicaciones creadas.")
     else:
         for item in reversed(historial[-20:]):
-            st.markdown(f"<div class='card'><b>{item.get('tipo')}</b> · {item.get('fecha_creacion')}<br><b>Idea:</b> {item.get('descripcion')}<br><b>Publicar:</b> {item.get('dia_recomendado')} {item.get('hora_recomendada')}<br><b>Gancho:</b> {item.get('gancho')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card'><b>{h(item.get('tipo'))}</b> · {h(item.get('fecha_creacion'))}<br><b>Idea:</b> {h_lineas(item.get('descripcion'))}<br><b>Publicar:</b> {h(item.get('dia_recomendado'))} {h(item.get('hora_recomendada'))}<br><b>Gancho:</b> {h_lineas(item.get('gancho'))}</div>", unsafe_allow_html=True)

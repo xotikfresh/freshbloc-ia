@@ -9,7 +9,9 @@ from datetime import datetime
 # CONFIG
 # ==========================
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    raise RuntimeError("Configura GROQ_API_KEY antes de ejecutar este respaldo.")
 client = Groq(api_key=GROQ_API_KEY)
 
 ANCHO, ALTO = 1080, 1350

@@ -1,0 +1,16 @@
+.streamlit/secrets.toml
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+*.log
+
+# Datos y piezas generadas localmente
+data/*.json
+data/cuentas/
+posts/*.png
+posts/*.jpg
+posts/*.jpeg
+posts/*.webp
