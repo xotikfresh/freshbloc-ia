@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps, ImageFilter, ImageDraw, ImageFont
 from groq import Groq
 import os, json, html, io, hmac, hashlib, base64, time, secrets
 from datetime import datetime, timedelta
@@ -1508,6 +1508,225 @@ def normalizar_salida_instagram(image_bytes, formato_contenido):
     img.save(buffer, format="JPEG", quality=94, optimize=True)
     return buffer.getvalue(), "image/jpeg"
 
+def fuente_dago(nombre, tamano):
+    rutas = [
+        os.path.join(BASE_DIR, "assets", nombre),
+        os.path.join(BASE_DIR, "assets", "Montserrat-Bold.ttf"),
+        os.path.join(BASE_DIR, "assets", "Anton-Regular.ttf"),
+    ]
+    for ruta in rutas:
+        try:
+            return ImageFont.truetype(ruta, tamano)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+def envolver_texto(draw, texto, fuente, ancho_max):
+    palabras = str(texto or "").strip().split()
+    if not palabras:
+        return []
+    lineas = []
+    actual = ""
+    for palabra in palabras:
+        prueba = f"{actual} {palabra}".strip()
+        caja = draw.textbbox((0, 0), prueba, font=fuente)
+        if caja[2] <= ancho_max or not actual:
+            actual = prueba
+        else:
+            lineas.append(actual)
+            actual = palabra
+    if actual:
+        lineas.append(actual)
+    return lineas
+
+def fuente_con_lineas(draw, texto, nombre_fuente, tamano_inicial, tamano_min, ancho_max, max_lineas=2):
+    texto = str(texto or "").strip()
+    for tamano in range(tamano_inicial, tamano_min - 1, -3):
+        fuente = fuente_dago(nombre_fuente, tamano)
+        lineas = envolver_texto(draw, texto, fuente, ancho_max)
+        if lineas and len(lineas) <= max_lineas:
+            return fuente, lineas
+    fuente = fuente_dago(nombre_fuente, tamano_min)
+    return fuente, envolver_texto(draw, texto, fuente, ancho_max)[:max_lineas]
+
+def dibujar_lineas(draw, lineas, xy, fuente, fill, espacio=0.94, stroke_width=0, stroke_fill=None):
+    x, y = xy
+    for linea in lineas:
+        draw.text((x, y), linea, font=fuente, fill=fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+        caja = draw.textbbox((x, y), linea, font=fuente, stroke_width=stroke_width)
+        y += int((caja[3] - caja[1]) * espacio) + 8
+    return y
+
+def extraer_datos_visuales(descripcion):
+    datos = {"producto": "", "precio": "", "vigencia": "", "condicion": ""}
+    claves = {
+        "producto/servicio": "producto",
+        "precio/oferta": "precio",
+        "vigencia": "vigencia",
+        "condicion": "condicion",
+        "condición": "condicion",
+    }
+    for linea in str(descripcion or "").splitlines():
+        if ":" not in linea:
+            continue
+        clave, valor = linea.split(":", 1)
+        clave = clave.strip().lower()
+        valor = valor.strip()
+        if not valor:
+            continue
+        for prefijo, destino in claves.items():
+            if clave.startswith(prefijo):
+                datos[destino] = valor
+                break
+    return datos
+
+def textos_para_diseno(perfil, data, descripcion, objetivo):
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(perfil, dict):
+        perfil = {}
+    datos = extraer_datos_visuales(descripcion)
+    visual = data.get("direccion_visual", {}) if isinstance(data, dict) else {}
+    if not isinstance(visual, dict):
+        visual = {}
+
+    producto = datos.get("producto") or data.get("gancho_visual") or data.get("titulo_post") or objetivo
+    precio = datos.get("precio", "")
+    vigencia = datos.get("vigencia", "")
+    condicion = datos.get("condicion", "")
+    subtitulo = datos.get("vigencia") or data.get("subtitulo_visual") or visual.get("texto_en_imagen") or objetivo
+    cta = condicion or perfil.get("whatsapp") or "Reserva por mensaje"
+
+    return {
+        "producto": texto_corto(producto, 36).upper(),
+        "precio": texto_corto(precio, 24).upper(),
+        "subtitulo": texto_corto(subtitulo, 46).upper(),
+        "condicion": texto_corto(condicion, 42).upper(),
+        "vigencia": texto_corto(vigencia, 42).upper(),
+        "cta": texto_corto(cta, 38).upper(),
+        "negocio": texto_corto(perfil.get("nombre"), 28).upper(),
+    }
+
+def rect_redondeado(draw, xy, radius, fill, outline=None, width=1):
+    try:
+        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+    except Exception:
+        draw.rectangle(xy, fill=fill, outline=outline, width=width)
+
+def gradiente_vertical(w, h, top, bottom):
+    img = Image.new("RGBA", (w, h), top)
+    pix = img.load()
+    for y in range(h):
+        t = y / max(1, h - 1)
+        color = tuple(int(top[i] * (1 - t) + bottom[i] * t) for i in range(4))
+        for x in range(w):
+            pix[x, y] = color
+    return img
+
+def agregar_diseno_publicitario(image_bytes, perfil, data, descripcion, objetivo, formato_contenido, variante=0):
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as original:
+            base = ImageOps.exif_transpose(original).convert("RGB")
+    except Exception:
+        return image_bytes, "image/jpeg"
+
+    base = ImageOps.fit(base, tamano_instagram(formato_contenido), method=Image.Resampling.LANCZOS)
+    img = base.convert("RGBA")
+    w, h = img.size
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    textos = textos_para_diseno(perfil, data, descripcion, objetivo)
+
+    paletas = [
+        {"accent": (161, 64, 255, 255), "accent2": (27, 214, 181, 255), "dark": (16, 9, 35, 235), "light": (255, 255, 255, 255), "price": (255, 230, 87, 255)},
+        {"accent": (255, 46, 119, 255), "accent2": (255, 180, 55, 255), "dark": (18, 18, 24, 235), "light": (255, 255, 255, 255), "price": (255, 255, 255, 255)},
+        {"accent": (83, 52, 235, 255), "accent2": (20, 184, 166, 255), "dark": (7, 20, 35, 235), "light": (255, 255, 255, 255), "price": (255, 220, 64, 255)},
+        {"accent": (124, 58, 237, 255), "accent2": (236, 72, 153, 255), "dark": (24, 10, 45, 235), "light": (255, 255, 255, 255), "price": (255, 244, 120, 255)},
+    ]
+    paleta = paletas[variante % len(paletas)]
+    margen = int(w * 0.055)
+    es_story = formato_contenido == "Historia"
+    variant = variante % 4
+
+    headline_size = int(w * (0.105 if not es_story else 0.115))
+    price_size = int(w * (0.145 if not es_story else 0.15))
+    body_size = int(w * 0.044)
+    small_size = int(w * 0.032)
+
+    if variant == 0:
+        panel_h = int(h * (0.34 if not es_story else 0.28))
+        grad = gradiente_vertical(w, panel_h, (0, 0, 0, 0), paleta["dark"])
+        overlay.alpha_composite(grad, (0, h - panel_h))
+        rect_redondeado(draw, (margen, h - panel_h - int(margen * .35), margen + int(w * .42), h - panel_h + int(margen * 1.25)), 24, paleta["accent"])
+        etiqueta_font = fuente_dago("Montserrat-Bold.ttf", small_size)
+        draw.text((margen + 18, h - panel_h - int(margen * .18)), "PROMO", font=etiqueta_font, fill=paleta["light"])
+        fuente_head, lineas_head = fuente_con_lineas(draw, textos["producto"], "Anton-Regular.ttf", headline_size, 44, int(w * .78), 2)
+        y = dibujar_lineas(draw, lineas_head, (margen, h - panel_h + int(margen * .72)), fuente_head, paleta["light"], stroke_width=2, stroke_fill=(0,0,0,150))
+        if textos["precio"]:
+            fuente_precio, lineas_precio = fuente_con_lineas(draw, textos["precio"], "Anton-Regular.ttf", price_size, 58, int(w * .5), 1)
+            dibujar_lineas(draw, lineas_precio, (margen, y - 4), fuente_precio, paleta["price"], stroke_width=2, stroke_fill=(0,0,0,150))
+        pie = textos["vigencia"] or textos["cta"]
+        if pie:
+            fuente_pie = fuente_dago("Montserrat-Bold.ttf", body_size)
+            draw.text((margen, h - margen - body_size), pie, font=fuente_pie, fill=paleta["light"])
+
+    elif variant == 1:
+        panel_w = int(w * (0.42 if not es_story else 0.78))
+        panel_h = int(h * (0.92 if not es_story else 0.28))
+        x0 = margen
+        y0 = margen if not es_story else h - panel_h - margen
+        rect_redondeado(draw, (x0, y0, x0 + panel_w, y0 + panel_h), 34, paleta["dark"])
+        draw.rectangle((x0, y0, x0 + 12, y0 + panel_h), fill=paleta["accent"])
+        fuente_marca = fuente_dago("Montserrat-Bold.ttf", small_size)
+        draw.text((x0 + 26, y0 + 22), textos["negocio"] or "DAGO", font=fuente_marca, fill=paleta["accent2"])
+        fuente_head, lineas_head = fuente_con_lineas(draw, textos["producto"], "Anton-Regular.ttf", int(headline_size * .88), 38, panel_w - 52, 3)
+        y = dibujar_lineas(draw, lineas_head, (x0 + 26, y0 + 62), fuente_head, paleta["light"], stroke_width=1, stroke_fill=(0,0,0,160))
+        if textos["precio"]:
+            fuente_precio, lineas_precio = fuente_con_lineas(draw, textos["precio"], "Anton-Regular.ttf", int(price_size * .9), 48, panel_w - 52, 2)
+            y = dibujar_lineas(draw, lineas_precio, (x0 + 26, y + 10), fuente_precio, paleta["price"], stroke_width=1, stroke_fill=(0,0,0,160))
+        if textos["vigencia"]:
+            fuente_body = fuente_dago("Montserrat-Bold.ttf", body_size)
+            lineas = envolver_texto(draw, textos["vigencia"], fuente_body, panel_w - 52)[:2]
+            dibujar_lineas(draw, lineas, (x0 + 26, y + 12), fuente_body, paleta["light"])
+
+    elif variant == 2:
+        if textos["precio"]:
+            badge_w = int(w * .42)
+            badge_h = int(h * (.16 if not es_story else .105))
+            rect_redondeado(draw, (w - badge_w - margen, margen, w - margen, margen + badge_h), 30, paleta["price"])
+            fuente_precio, lineas_precio = fuente_con_lineas(draw, textos["precio"], "Anton-Regular.ttf", int(price_size * .72), 44, badge_w - 34, 1)
+            dibujar_lineas(draw, lineas_precio, (w - badge_w - margen + 20, margen + 16), fuente_precio, (22, 11, 38, 255))
+        panel_h = int(h * (.24 if not es_story else .2))
+        rect_redondeado(draw, (margen, h - panel_h - margen, w - margen, h - margen), 34, (255, 255, 255, 232))
+        fuente_head, lineas_head = fuente_con_lineas(draw, textos["producto"], "Anton-Regular.ttf", int(headline_size * .78), 38, w - margen * 4, 2)
+        y = dibujar_lineas(draw, lineas_head, (margen * 2, h - panel_h - margen + 24), fuente_head, (28, 12, 48, 255))
+        fuente_body = fuente_dago("Montserrat-Bold.ttf", body_size)
+        apoyo = textos["vigencia"] or textos["cta"]
+        if apoyo:
+            draw.text((margen * 2, y + 2), apoyo, font=fuente_body, fill=paleta["accent"])
+
+    else:
+        draw.rectangle((0, 0, w, int(h * .028)), fill=paleta["accent"])
+        draw.rectangle((0, h - int(h * .028), w, h), fill=paleta["accent2"])
+        panel_h = int(h * (.3 if not es_story else .22))
+        grad = gradiente_vertical(w, panel_h, paleta["dark"], (0, 0, 0, 35))
+        overlay.alpha_composite(grad, (0, 0))
+        fuente_head, lineas_head = fuente_con_lineas(draw, textos["producto"], "Anton-Regular.ttf", int(headline_size * .82), 38, int(w * .74), 2)
+        dibujar_lineas(draw, lineas_head, (margen, margen + 16), fuente_head, paleta["light"], stroke_width=2, stroke_fill=(0,0,0,160))
+        if textos["precio"]:
+            fuente_precio, lineas_precio = fuente_con_lineas(draw, textos["precio"], "Anton-Regular.ttf", int(price_size * .72), 46, int(w * .48), 1)
+            dibujar_lineas(draw, lineas_precio, (margen, margen + int(panel_h * .52)), fuente_precio, paleta["price"], stroke_width=1, stroke_fill=(0,0,0,150))
+        cta = textos["vigencia"] or textos["cta"]
+        if cta:
+            fuente_cta = fuente_dago("Montserrat-Bold.ttf", body_size)
+            rect_redondeado(draw, (margen, h - margen - int(body_size * 2.1), margen + int(w * .62), h - margen), 28, paleta["accent"])
+            draw.text((margen + 18, h - margen - int(body_size * 1.65)), cta, font=fuente_cta, fill=paleta["light"])
+
+    combinado = Image.alpha_composite(img, overlay).convert("RGB")
+    buffer = io.BytesIO()
+    combinado.save(buffer, format="JPEG", quality=95, optimize=True)
+    return buffer.getvalue(), "image/jpeg"
+
 def prompt_recraft(perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0):
     visual = data.get("direccion_visual", {})
     if not isinstance(visual, dict):
@@ -1583,31 +1802,27 @@ def prompt_edicion_recraft(perfil, data, descripcion, objetivo, formato_contenid
         visual = {}
 
     formato = "Instagram story 9:16" if formato_contenido == "Historia" else "Instagram square post 1:1"
-    gancho = texto_corto(data.get("gancho_visual") or data.get("titulo_post") or objetivo, 38)
-    subtitulo = texto_corto(data.get("subtitulo_visual") or visual.get("texto_en_imagen"), 58)
-    direccion = texto_corto(perfil.get("direccion"), 80) if mostrar_direccion else ""
     estilo = texto_corto(visual.get("estilo_visual"), 90)
     rubro = texto_corto(perfil.get("rubro"), 60)
     productos = texto_corto(perfil.get("productos"), 120)
     brief = texto_corto(descripcion, 160)
     variantes = [
-        "clean premium commercial ad",
-        "modern editorial social media design",
-        "minimal product-focused campaign",
-        "fresh local business ad with warm lighting",
+        "premium advertising photo retouch, clean contrast, realistic lighting",
+        "editorial social media photo polish, sharp subject, soft clean background",
+        "high-end local business photo, natural skin/product texture, polished color",
+        "commercial campaign photo edit, improved light, subtle depth and clarity",
     ]
 
     prompt = f"""
-Edit the uploaded real product/business photo into a professional {formato}.
-Preserve the exact product, food, service and identity from the photo. Do not replace it.
-Improve lighting, contrast, background, composition and commercial polish.
+Retouch the uploaded real photo for a professional {formato} advertisement.
+Preserve the exact person/product/service, pose, haircut design, face, clothing and identity from the original photo.
+Do not replace the subject. Do not redesign the product. Do not add new objects.
+Improve lighting, contrast, color grade, background cleanliness, sharpness and commercial polish only.
+Leave clean negative space for graphic text overlays added later.
 Business: {rubro}. Products/services: {productos}.
 Goal: {objetivo}. Brief: {brief}.
 Style: {estilo or variantes[variante % len(variantes)]}.
-Readable Spanish headline: "{gancho}".
-Supporting text: "{subtitulo}".
-{f'Address text: "{direccion}".' if direccion else 'No address text.'}
-Rules: no fake logo, no watermark, no random extra text, no invented prices, no fake discounts, no fake stock. If text is difficult, prioritize a clean edited product photo with space for caption.
+Strict rules: no text, no letters, no numbers, no fake logo, no watermark, no brand badge, no random symbols, no invented prices, no fake discounts, no fake stock.
 """.strip()
     return prompt[:950]
 
@@ -1665,9 +1880,18 @@ def generar_imagen_recraft(perfil, data, descripcion, objetivo, formato_contenid
         raise RuntimeError(f"Recraft generó la imagen, pero no pude descargarla: {exc}") from exc
 
     image_bytes, mime = normalizar_salida_instagram(image_response.content, formato_contenido)
+    image_bytes, mime = agregar_diseno_publicitario(
+        image_bytes,
+        perfil,
+        data,
+        descripcion,
+        objetivo,
+        formato_contenido,
+        variante=variante,
+    )
     return image_bytes, image_url, prompt, mime
 
-def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0, fuerza=0.35):
+def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0, fuerza=0.18):
     api_key = leer_secreto("RECRAFT_API_KEY")
     if not api_key:
         raise RuntimeError("Falta configurar RECRAFT_API_KEY en .streamlit/secrets.toml.")
@@ -1683,6 +1907,7 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
     )
 
     try:
+        fuerza_recraft = max(0.08, min(float(fuerza), 0.45))
         response = requests.post(
             RECRAFT_IMAGE_TO_IMAGE_URL,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -1695,7 +1920,7 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
             },
             data={
                 "prompt": prompt,
-                "strength": str(fuerza),
+                "strength": str(fuerza_recraft),
                 "n": "1",
                 "model": RECRAFT_EDIT_MODEL,
                 "response_format": "url",
@@ -1725,6 +1950,15 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
         raise RuntimeError(f"Recraft editó la imagen, pero no pude descargarla: {exc}") from exc
 
     image_bytes, mime = normalizar_salida_instagram(image_response.content, formato_contenido)
+    image_bytes, mime = agregar_diseno_publicitario(
+        image_bytes,
+        perfil,
+        data,
+        descripcion,
+        objetivo,
+        formato_contenido,
+        variante=variante,
+    )
     return image_bytes, image_url, prompt, mime
 
 def generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial):
@@ -2287,12 +2521,12 @@ def render_creador():
                 st.image(foto_producto, caption="Foto base para editar", use_container_width=True)
 
             fuerza_edicion = st.slider(
-                "Cambio visual",
-                min_value=0.15,
-                max_value=0.75,
-                value=st.session_state.get("fuerza_edicion", 0.35),
-                step=0.05,
-                help="Más bajo conserva más la foto original. Más alto deja que Recraft rediseñe más la escena."
+                "Retoque de foto",
+                min_value=0.08,
+                max_value=0.45,
+                value=st.session_state.get("fuerza_edicion", 0.18),
+                step=0.03,
+                help="Mas bajo conserva casi intacta la foto original. Mas alto permite limpiar luz, fondo y contraste, pero sin cambiar el producto."
             )
             st.session_state["fuerza_edicion"] = fuerza_edicion
 
@@ -2389,7 +2623,7 @@ def render_creador():
                                     st.session_state.get("last_formato", "Publicación"),
                                     st.session_state.get("last_mostrar_direccion", False),
                                     st.session_state["design_variant"],
-                                    st.session_state.get("last_fuerza_edicion", 0.35),
+                                    st.session_state.get("last_fuerza_edicion", 0.18),
                                 )
                                 st.session_state["post_buffer"] = imagen
                                 st.session_state["recraft_url"] = recraft_url
