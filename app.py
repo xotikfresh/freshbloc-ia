@@ -818,9 +818,10 @@ def supabase_headers(prefer=""):
     _, key = supabase_config()
     headers = {
         "apikey": key,
-        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
+    if not key.startswith(("sb_secret_", "sb_publishable_")):
+        headers["Authorization"] = f"Bearer {key}"
     if prefer:
         headers["Prefer"] = prefer
     return headers
@@ -843,8 +844,19 @@ def supabase_request(method, tabla, params=None, payload=None, prefer=""):
         raise RuntimeError("No pude conectar con Supabase. Revisa la URL y la clave.") from exc
 
     if response.status_code >= 400:
-        detalle = response.text[:240] if response.text else response.reason
-        raise RuntimeError(f"Supabase respondio con error {response.status_code}: {detalle}")
+        if response.status_code in (401, 403):
+            raise RuntimeError(
+                "Supabase no autorizo la consulta. En Streamlit Secrets usa la key privada "
+                "service_role/secret en SUPABASE_SECRET_KEY, no la anon/public key."
+            )
+        if response.status_code == 404:
+            raise RuntimeError(
+                "No encontre las tablas de Dago en Supabase. Revisa que hayas ejecutado el SQL "
+                "para crear dago_users, dago_profiles y dago_histories."
+            )
+        raise RuntimeError(
+            f"Supabase respondio con error {response.status_code}. Revisa la URL, la key y las tablas."
+        )
     if not response.text:
         return None
     try:
@@ -1084,12 +1096,15 @@ def render_login():
                 submit = st.form_submit_button("ENTRAR", use_container_width=True)
 
             if submit:
-                auth_user = autenticar_usuario(usuario, password)
-                if auth_user:
-                    st.session_state["auth_user"] = auth_user
-                    st.rerun()
-                else:
-                    st.error("Usuario o contraseña incorrectos.")
+                try:
+                    auth_user = autenticar_usuario(usuario, password)
+                    if auth_user:
+                        st.session_state["auth_user"] = auth_user
+                        st.rerun()
+                    else:
+                        st.error("Usuario o contraseña incorrectos.")
+                except RuntimeError as exc:
+                    st.error(str(exc))
 
         with tab_registro:
             with st.form("registro_form"):
@@ -1110,6 +1125,8 @@ def render_login():
                         st.success("Cuenta creada.")
                         st.rerun()
                     except ValueError as exc:
+                        st.error(str(exc))
+                    except RuntimeError as exc:
                         st.error(str(exc))
 
 def requerir_login():
