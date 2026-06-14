@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image, ImageOps, ImageFilter, ImageDraw, ImageFont
 from groq import Groq
-import os, json, html, io, hmac, hashlib, base64, time, secrets
+import os, json, html, io, hmac, hashlib, base64, time, secrets, unicodedata
 from datetime import datetime, timedelta
 import requests
 
@@ -1252,7 +1252,7 @@ def render_login():
         <div class="home-card accent-teal">
         <span class="card-kicker">Flujo</span>
         <h3>Sube una foto real</h3>
-        <p>Dago usa la imagen del producto o local como base para editarla con Recraft.</p>
+        <p>Dago usa la imagen del producto o local como base y Recraft arma una pieza publicitaria con texto controlado.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1580,6 +1580,24 @@ def extraer_datos_visuales(descripcion):
                 break
     return datos
 
+def normalizar_precio_publicitario(precio):
+    texto = str(precio or "").strip()
+    if not texto:
+        return ""
+    limpio = texto.lower().replace(".", "").replace(",", "").replace("$", "")
+    digitos = "".join(c for c in limpio if c.isdigit())
+    if digitos and len(digitos) >= 4 and all(p not in limpio for p in ("x", "%", "desde")):
+        try:
+            return f"${int(digitos):,}".replace(",", ".")
+        except Exception:
+            return texto.upper()
+    if digitos and "mil" in limpio and len(digitos) <= 3:
+        try:
+            return f"${int(digitos) * 1000:,}".replace(",", ".")
+        except Exception:
+            return texto.upper()
+    return texto.upper()
+
 def textos_para_diseno(perfil, data, descripcion, objetivo):
     if not isinstance(data, dict):
         data = {}
@@ -1591,7 +1609,7 @@ def textos_para_diseno(perfil, data, descripcion, objetivo):
         visual = {}
 
     producto = datos.get("producto") or data.get("gancho_visual") or data.get("titulo_post") or objetivo
-    precio = datos.get("precio", "")
+    precio = normalizar_precio_publicitario(datos.get("precio", ""))
     vigencia = datos.get("vigencia", "")
     condicion = datos.get("condicion", "")
     subtitulo = datos.get("vigencia") or data.get("subtitulo_visual") or visual.get("texto_en_imagen") or objetivo
@@ -1606,6 +1624,170 @@ def textos_para_diseno(perfil, data, descripcion, objetivo):
         "cta": texto_corto(cta, 38).upper(),
         "negocio": texto_corto(perfil.get("nombre"), 28).upper(),
     }
+
+def limpiar_palabra_recraft(texto):
+    texto = str(texto or "").strip().upper()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = texto.replace("Ñ", "N")
+    permitidos = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ.,;:!?¡¿-_'\"/\\|@#$%&*()[]{}<>+= ")
+    texto = "".join(c if c in permitidos else " " for c in texto)
+    texto = " ".join(texto.split())
+    return texto
+
+def palabras_recraft(texto, max_palabras=8):
+    texto = limpiar_palabra_recraft(texto)
+    if not texto:
+        return []
+    palabras = []
+    for palabra in texto.split():
+        palabra = palabra.strip()
+        if not palabra:
+            continue
+        palabras.append(palabra[:24])
+        if len(palabras) >= max_palabras:
+            break
+    return palabras
+
+def normalizar_vigencia_publicitaria(texto):
+    texto = limpiar_palabra_recraft(texto)
+    if not texto:
+        return ""
+    texto = texto.replace("HORAS", "").replace("HRS", "").replace("HR", "")
+    texto = " ".join(texto.split())
+    if "HASTA" in texto and "LAS" in texto:
+        texto = texto.replace("HASTA LAS", "HASTA")
+    return texto[:34]
+
+def textos_para_recraft_layout(perfil, data, descripcion, objetivo):
+    textos = textos_para_diseno(perfil, data, descripcion, objetivo)
+    producto = limpiar_palabra_recraft(textos.get("producto"))
+    precio = limpiar_palabra_recraft(textos.get("precio"))
+    vigencia = normalizar_vigencia_publicitaria(textos.get("vigencia"))
+    condicion = limpiar_palabra_recraft(textos.get("condicion"))
+    for prefijo in ("CON LA ", "CON EL ", "CON "):
+        if condicion.startswith(prefijo):
+            condicion = condicion[len(prefijo):]
+            break
+    negocio = limpiar_palabra_recraft(textos.get("negocio"))
+
+    if not producto:
+        producto = limpiar_palabra_recraft(objetivo) or "PROMO"
+
+    return {
+        "headline": palabras_recraft(producto, 6),
+        "price": palabras_recraft(precio, 2),
+        "validity": palabras_recraft(vigencia, 4),
+        "condition": palabras_recraft(condicion, 3),
+        "brand": palabras_recraft(negocio, 2),
+    }
+
+def dividir_lineas_palabras(palabras, max_lineas=2):
+    palabras = [p for p in palabras if p]
+    if not palabras:
+        return []
+    if len(palabras) <= 3 or max_lineas == 1:
+        return [palabras]
+    mitad = (len(palabras) + 1) // 2
+    return [palabras[:mitad], palabras[mitad:]][:max_lineas]
+
+def agregar_palabras_layout(layout, palabras, x, y, ancho, alto, espacio=0.012):
+    palabras = [p for p in palabras if p]
+    if not palabras:
+        return y
+    peso_total = sum(max(len(p), 3) for p in palabras)
+    x_actual = x
+    for palabra in palabras:
+        peso = max(len(palabra), 3)
+        w_rel = ancho * (peso / max(peso_total, 1))
+        w_rel = max(w_rel - espacio, 0.035)
+        layout.append({
+            "text": palabra,
+            "bbox": [
+                [round(x_actual, 4), round(y, 4)],
+                [round(min(x_actual + w_rel, x + ancho), 4), round(y, 4)],
+                [round(min(x_actual + w_rel, x + ancho), 4), round(min(y + alto, 0.97), 4)],
+                [round(x_actual, 4), round(min(y + alto, 0.97), 4)],
+            ],
+        })
+        x_actual += w_rel + espacio
+    return y + alto + espacio
+
+def crear_text_layout_recraft(textos, formato_contenido, variante=0):
+    es_story = formato_contenido == "Historia"
+    layout = []
+
+    if es_story:
+        lineas_head = dividir_lineas_palabras(textos.get("headline", []), 2)
+        if variante % 3 == 1:
+            y = 0.54
+            x = 0.08
+            ancho = 0.78
+        elif variante % 3 == 2:
+            y = 0.12
+            x = 0.08
+            ancho = 0.74
+        else:
+            y = 0.60
+            x = 0.08
+            ancho = 0.82
+        for linea in lineas_head:
+            y = agregar_palabras_layout(layout, linea, x, y, ancho, 0.075, 0.014)
+        if textos.get("price"):
+            y = agregar_palabras_layout(layout, textos["price"], x, y + 0.008, 0.56, 0.105, 0.014)
+        apoyo = []
+        apoyo.extend(textos.get("validity", []))
+        apoyo.extend(textos.get("condition", []))
+        if apoyo:
+            agregar_palabras_layout(layout, apoyo[:6], x, min(y + 0.012, 0.92), 0.82, 0.044, 0.012)
+        if textos.get("brand") and variante % 2 == 1:
+            agregar_palabras_layout(layout, textos["brand"], 0.08, 0.045, 0.42, 0.035, 0.01)
+    else:
+        lineas_head = dividir_lineas_palabras(textos.get("headline", []), 2)
+        if variante % 3 == 1:
+            x = 0.08
+            y = 0.12
+            ancho = 0.62
+        elif variante % 3 == 2:
+            x = 0.10
+            y = 0.54
+            ancho = 0.76
+        else:
+            x = 0.08
+            y = 0.58
+            ancho = 0.78
+        for linea in lineas_head:
+            y = agregar_palabras_layout(layout, linea, x, y, ancho, 0.078, 0.014)
+        if textos.get("price"):
+            y = agregar_palabras_layout(layout, textos["price"], x, y + 0.012, 0.46, 0.105, 0.014)
+        apoyo = []
+        apoyo.extend(textos.get("validity", []))
+        apoyo.extend(textos.get("condition", []))
+        if apoyo:
+            agregar_palabras_layout(layout, apoyo[:6], x, min(y + 0.018, 0.90), 0.78, 0.045, 0.012)
+        if textos.get("brand") and variante % 2 == 1:
+            agregar_palabras_layout(layout, textos["brand"], 0.08, 0.045, 0.38, 0.034, 0.01)
+
+    return layout[:18]
+
+def estilo_recraft_publicista(variante=0):
+    estilos = [
+        "Urban Drama",
+        "Hard flash",
+        "Studio photo",
+        "Product photo",
+        "Photorealism",
+    ]
+    return estilos[variante % len(estilos)]
+
+def negative_prompt_recraft_publicista():
+    return (
+        "English words, random text, extra words outside the supplied text layout, "
+        "misspelled text, unreadable small schedule, fake logo, watermark, news banner, "
+        "large black lower-third rectangle, generic poster template, duplicated typography, "
+        "invented price, invented date, invented brand, changed haircut design, changed face, "
+        "distorted product, cropped important product details"
+    )
 
 def rect_redondeado(draw, xy, radius, fill, outline=None, width=1):
     try:
@@ -1797,6 +1979,10 @@ STRICT RULES:
 """.strip()
 
 def prompt_edicion_recraft(perfil, data, descripcion, objetivo, formato_contenido, mostrar_direccion=False, variante=0):
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(perfil, dict):
+        perfil = {}
     visual = data.get("direccion_visual", {})
     if not isinstance(visual, dict):
         visual = {}
@@ -1806,23 +1992,28 @@ def prompt_edicion_recraft(perfil, data, descripcion, objetivo, formato_contenid
     rubro = texto_corto(perfil.get("rubro"), 60)
     productos = texto_corto(perfil.get("productos"), 120)
     brief = texto_corto(descripcion, 160)
+    textos_layout = textos_para_recraft_layout(perfil, data, descripcion, objetivo)
+    palabras_exactas = []
+    for grupo in ("headline", "price", "validity", "condition", "brand"):
+        palabras_exactas.extend(textos_layout.get(grupo, []))
     variantes = [
-        "premium advertising photo retouch, clean contrast, realistic lighting",
-        "editorial social media photo polish, sharp subject, soft clean background",
-        "high-end local business photo, natural skin/product texture, polished color",
-        "commercial campaign photo edit, improved light, subtle depth and clarity",
+        "bold high-contrast street advertising, premium barber or local business campaign",
+        "designer-made Instagram ad with expressive typography and strong commercial hierarchy",
+        "modern editorial social media ad, clean readable price and schedule, premium polish",
+        "urban promotional poster, sharp product photo, dynamic Spanish typography",
     ]
 
     prompt = f"""
-Retouch the uploaded real photo for a professional {formato} advertisement.
-Preserve the exact person/product/service, pose, haircut design, face, clothing and identity from the original photo.
-Do not replace the subject. Do not redesign the product. Do not add new objects.
-Improve lighting, contrast, color grade, background cleanliness, sharpness and commercial polish only.
-Leave clean negative space for graphic text overlays added later.
+Create the final professional {formato} advertisement from the uploaded real photo.
+Use the uploaded photo as the base. Preserve the exact person/product/service, pose, haircut design, face, clothing and identity.
+Act like a senior Spanish-speaking publicist and art director for a local Chilean business.
+Make a finished advertising design with striking typography, clean hierarchy, readable offer and premium social media polish.
+Use ONLY the words supplied through text_layout. Do not add any other text, letter, number, logo or badge.
+Exact words allowed: {" ".join(palabras_exactas)}
 Business: {rubro}. Products/services: {productos}.
 Goal: {objetivo}. Brief: {brief}.
-Style: {estilo or variantes[variante % len(variantes)]}.
-Strict rules: no text, no letters, no numbers, no fake logo, no watermark, no brand badge, no random symbols, no invented prices, no fake discounts, no fake stock.
+Style direction: {estilo or variantes[variante % len(variantes)]}.
+Avoid generic template blocks. No black news lower-third. Keep schedule and price clearly readable.
 """.strip()
     return prompt[:950]
 
@@ -1905,9 +2096,26 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
         mostrar_direccion=mostrar_direccion,
         variante=variante,
     )
+    text_layout = crear_text_layout_recraft(
+        textos_para_recraft_layout(perfil, data, descripcion, objetivo),
+        formato_contenido,
+        variante=variante,
+    )
 
     try:
-        fuerza_recraft = max(0.08, min(float(fuerza), 0.45))
+        fuerza_recraft = max(0.16, min(float(fuerza or 0.30), 0.58))
+        body = {
+            "prompt": prompt,
+            "strength": str(fuerza_recraft),
+            "n": "1",
+            "model": RECRAFT_EDIT_MODEL,
+            "style": estilo_recraft_publicista(variante),
+            "response_format": "url",
+            "negative_prompt": negative_prompt_recraft_publicista(),
+        }
+        if text_layout:
+            body["text_layout"] = json.dumps(text_layout, ensure_ascii=False)
+
         response = requests.post(
             RECRAFT_IMAGE_TO_IMAGE_URL,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -1918,13 +2126,7 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
                     foto_info["mime"],
                 )
             },
-            data={
-                "prompt": prompt,
-                "strength": str(fuerza_recraft),
-                "n": "1",
-                "model": RECRAFT_EDIT_MODEL,
-                "response_format": "url",
-            },
+            data=body,
             timeout=120,
         )
     except requests.RequestException as exc:
@@ -1936,29 +2138,21 @@ def generar_edicion_recraft(foto_info, perfil, data, descripcion, objetivo, form
         payload = {}
 
     if response.status_code >= 400:
-        raise RuntimeError(f"Recraft rechazó la edición: {mensaje_error_recraft(response, payload)}")
+        detalle = mensaje_error_recraft(response, payload)
+        raise RuntimeError(f"Recraft rechazo la edicion publicitaria: {detalle}")
 
     try:
         image_url = payload["data"][0]["url"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError("Recraft no devolvió una imagen editada válida.") from exc
+        raise RuntimeError("Recraft no devolvio una imagen editada valida.") from exc
 
     try:
         image_response = requests.get(image_url, timeout=120)
         image_response.raise_for_status()
     except requests.RequestException as exc:
-        raise RuntimeError(f"Recraft editó la imagen, pero no pude descargarla: {exc}") from exc
+        raise RuntimeError(f"Recraft edito la imagen, pero no pude descargarla: {exc}") from exc
 
     image_bytes, mime = normalizar_salida_instagram(image_response.content, formato_contenido)
-    image_bytes, mime = agregar_diseno_publicitario(
-        image_bytes,
-        perfil,
-        data,
-        descripcion,
-        objetivo,
-        formato_contenido,
-        variante=variante,
-    )
     return image_bytes, image_url, prompt, mime
 
 def generar_con_ia(perfil, descripcion, objetivo, formato_contenido, historial):
@@ -2508,7 +2702,7 @@ def render_creador():
                 st.text_input("Condición o dato clave", key="promo_condicion")
 
             st.markdown("<div class='step-title'>Foto del producto o local</div>", unsafe_allow_html=True)
-            st.markdown("<p class='soft-note'>Sube una foto real. Dago la usará como base y Recraft la editará para que se vea más publicable.</p>", unsafe_allow_html=True)
+            st.markdown("<p class='soft-note'>Sube una foto real. Recraft la usa como base y Dago le manda textos exactos para evitar palabras inventadas.</p>", unsafe_allow_html=True)
 
             foto_producto = st.file_uploader(
                 "Foto del producto o local",
@@ -2521,12 +2715,12 @@ def render_creador():
                 st.image(foto_producto, caption="Foto base para editar", use_container_width=True)
 
             fuerza_edicion = st.slider(
-                "Retoque de foto",
-                min_value=0.08,
-                max_value=0.45,
-                value=st.session_state.get("fuerza_edicion", 0.18),
+                "Libertad creativa de Recraft",
+                min_value=0.16,
+                max_value=0.58,
+                value=st.session_state.get("fuerza_edicion", 0.30),
                 step=0.03,
-                help="Mas bajo conserva casi intacta la foto original. Mas alto permite limpiar luz, fondo y contraste, pero sin cambiar el producto."
+                help="Mas bajo conserva mas la foto original. Mas alto deja que Recraft proponga una pieza mas publicitaria."
             )
             st.session_state["fuerza_edicion"] = fuerza_edicion
 
@@ -2557,9 +2751,9 @@ def render_creador():
                 elif not descripcion_generacion.strip():
                     st.error("Escribe qué quieres comunicar.")
                 elif not foto_producto:
-                    st.error("Sube una foto real del producto o local para que Recraft la edite.")
+                    st.error("Sube una foto real del producto o local para que Recraft disene con esa base.")
                 else:
-                    with st.spinner("Dago está preparando tu contenido..."):
+                    with st.spinner("Recraft esta disenando tu pieza publicitaria..."):
                         st.session_state["design_variant"] = 0
                         try:
                             foto_info = preparar_imagen_para_recraft(foto_producto, formato_contenido)
@@ -2609,7 +2803,7 @@ def render_creador():
                 with cbtn1:
                     if st.button("REHACER EN RECRAFT", use_container_width=True):
                         st.session_state["design_variant"] = st.session_state.get("design_variant", 0) + 1
-                        with st.spinner("Recraft está creando otro diseño..."):
+                        with st.spinner("Recraft esta probando otra direccion publicitaria..."):
                             try:
                                 foto_info = st.session_state.get("last_foto_info")
                                 if not foto_info:
@@ -2623,7 +2817,7 @@ def render_creador():
                                     st.session_state.get("last_formato", "Publicación"),
                                     st.session_state.get("last_mostrar_direccion", False),
                                     st.session_state["design_variant"],
-                                    st.session_state.get("last_fuerza_edicion", 0.18),
+                                    st.session_state.get("last_fuerza_edicion", 0.30),
                                 )
                                 st.session_state["post_buffer"] = imagen
                                 st.session_state["recraft_url"] = recraft_url
