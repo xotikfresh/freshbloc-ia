@@ -1,9 +1,14 @@
 import streamlit as st
 from PIL import Image, ImageOps, ImageFilter
 from groq import Groq
-import os, json, html, io, hmac, hashlib
-from datetime import datetime
+import os, json, html, io, hmac, hashlib, base64, time, secrets
+from datetime import datetime, timedelta
 import requests
+
+try:
+    import extra_streamlit_components as stx
+except Exception:
+    stx = None
 
 st.set_page_config(page_title="Dago", page_icon="💜", layout="wide")
 
@@ -28,6 +33,8 @@ INSTAGRAM_STORY_SIZE = (1080, 1920)
 MAX_HISTORY_ITEMS = 200
 HISTORY_CONTEXT_ITEMS = 8
 SUPABASE_TIMEOUT = 12
+REMEMBER_SESSION_DAYS = 30
+REMEMBER_SESSION_NAME = "dago_session"
 
 Image.MAX_IMAGE_PIXELS = 40_000_000
 
@@ -763,12 +770,62 @@ div[data-testid="stImage"] img {
     color:#756281!important;
     margin:.35rem 0 0!important;
 }
+div[data-testid="stButton"] button[kind="primary"],
+div[data-testid="stButton"] button[data-testid="baseButton-primary"] {
+    position:relative;
+    min-height:178px;
+    align-items:flex-start!important;
+    justify-content:flex-start!important;
+    padding:24px!important;
+    text-align:left!important;
+    white-space:pre-line!important;
+    overflow:hidden;
+    border:0!important;
+    border-radius:0 22px 0 22px!important;
+    background:linear-gradient(135deg,#4c1d95 0%,#7c3aed 52%,#c026d3 100%)!important;
+    box-shadow:0 22px 45px rgba(72,38,138,.20)!important;
+    clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,24px 100%,0 calc(100% - 24px));
+}
+div[data-testid="stButton"] button[kind="primary"]:hover,
+div[data-testid="stButton"] button[data-testid="baseButton-primary"]:hover {
+    transform:translateY(-2px);
+    box-shadow:0 26px 52px rgba(72,38,138,.28)!important;
+    background:linear-gradient(135deg,#42137f 0%,#6d28d9 52%,#a21caf 100%)!important;
+}
+div[data-testid="stButton"] button[kind="primary"]:after,
+div[data-testid="stButton"] button[data-testid="baseButton-primary"]:after {
+    content:"";
+    position:absolute;
+    right:-62px;
+    bottom:-76px;
+    width:220px;
+    height:220px;
+    border-radius:50%;
+    background:rgba(255,255,255,.14);
+}
+div[data-testid="stButton"] button[kind="primary"] p,
+div[data-testid="stButton"] button[data-testid="baseButton-primary"] p {
+    position:relative;
+    z-index:1;
+    max-width:520px;
+    color:#fff!important;
+    white-space:pre-line!important;
+    text-align:left!important;
+    font-size:17px!important;
+    line-height:1.45!important;
+    font-weight:850!important;
+}
 @media (max-width:760px) {
     .hero.app-hero {padding:20px!important;min-height:unset!important;}
     .hero.app-hero h1 {font-size:32px!important;}
     .hero-stats {width:100%;grid-template-columns:1fr 1fr;}
     .dashboard-intro h2 {font-size:28px!important;}
-    .studio-card,.format-tile,.profile-banner {clip-path:none;border-radius:0 16px 0 16px!important;}
+    .studio-card,.format-tile,.profile-banner,
+    div[data-testid="stButton"] button[kind="primary"],
+    div[data-testid="stButton"] button[data-testid="baseButton-primary"] {
+        clip-path:none;
+        border-radius:0 16px 0 16px!important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -800,6 +857,118 @@ def leer_secreto(nombre):
         return st.secrets.get(nombre) or os.getenv(nombre, "")
     except Exception:
         return os.getenv(nombre, "")
+
+def secreto_sesion():
+    secreto = (
+        leer_secreto("DAGO_SESSION_SECRET")
+        or leer_secreto("SUPABASE_SECRET_KEY")
+        or leer_secreto("SUPABASE_SERVICE_ROLE_KEY")
+        or leer_secreto("SUPABASE_KEY")
+    )
+    return secreto or "dago-local-session-secret"
+
+def base64_url_encode(data):
+    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+def base64_url_decode(texto):
+    relleno = "=" * (-len(texto) % 4)
+    return base64.urlsafe_b64decode((texto + relleno).encode("utf-8"))
+
+def crear_token_recordado(usuario):
+    payload = {
+        "usuario": normalizar_usuario(usuario),
+        "exp": int(time.time()) + REMEMBER_SESSION_DAYS * 24 * 60 * 60,
+        "nonce": secrets.token_urlsafe(12),
+    }
+    payload_raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    payload_b64 = base64_url_encode(payload_raw)
+    firma = hmac.new(secreto_sesion().encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).digest()
+    return f"{payload_b64}.{base64_url_encode(firma)}"
+
+def verificar_token_recordado(token):
+    try:
+        payload_b64, firma_b64 = str(token or "").split(".", 1)
+        firma_real = hmac.new(secreto_sesion().encode("utf-8"), payload_b64.encode("utf-8"), hashlib.sha256).digest()
+        firma_enviada = base64_url_decode(firma_b64)
+        if not hmac.compare_digest(firma_real, firma_enviada):
+            return None
+        payload = json.loads(base64_url_decode(payload_b64).decode("utf-8"))
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return None
+        return normalizar_usuario(payload.get("usuario", ""))
+    except Exception:
+        return None
+
+def valor_query(nombre):
+    try:
+        valor = st.query_params.get(nombre, "")
+        if isinstance(valor, list):
+            return valor[0] if valor else ""
+        return valor or ""
+    except Exception:
+        return ""
+
+def cookie_manager():
+    if stx is None:
+        return None
+    try:
+        if "_dago_cookie_manager" not in st.session_state:
+            st.session_state["_dago_cookie_manager"] = stx.CookieManager()
+        return st.session_state["_dago_cookie_manager"]
+    except Exception:
+        return None
+
+def obtener_token_recordado():
+    token = valor_query(REMEMBER_SESSION_NAME)
+    if token:
+        return token
+    manager = cookie_manager()
+    if not manager:
+        return ""
+    try:
+        cookies = manager.get_all()
+        return cookies.get(REMEMBER_SESSION_NAME, "")
+    except Exception:
+        return ""
+
+def guardar_token_recordado(token):
+    try:
+        st.query_params[REMEMBER_SESSION_NAME] = token
+    except Exception:
+        pass
+    manager = cookie_manager()
+    if manager:
+        try:
+            manager.set(
+                REMEMBER_SESSION_NAME,
+                token,
+                expires_at=datetime.now() + timedelta(days=REMEMBER_SESSION_DAYS),
+            )
+        except Exception:
+            pass
+
+def borrar_token_recordado():
+    try:
+        if REMEMBER_SESSION_NAME in st.query_params:
+            del st.query_params[REMEMBER_SESSION_NAME]
+    except Exception:
+        pass
+    manager = cookie_manager()
+    if manager:
+        try:
+            manager.delete(REMEMBER_SESSION_NAME)
+        except Exception:
+            try:
+                manager.remove(REMEMBER_SESSION_NAME)
+            except Exception:
+                pass
+
+def restaurar_sesion_recordada():
+    if "auth_user" in st.session_state:
+        return
+    usuario = verificar_token_recordado(obtener_token_recordado())
+    if usuario:
+        st.session_state["auth_user"] = usuario
 
 def supabase_config():
     url = leer_secreto("SUPABASE_URL").strip().rstrip("/")
@@ -1040,6 +1209,7 @@ def guardar_historial_usuario(usuario, history_path, historial):
     save_json(history_path, historial)
 
 def cerrar_sesion():
+    borrar_token_recordado()
     for key in [
         "auth_user",
         "mostrar_creador",
@@ -1093,6 +1263,7 @@ def render_login():
             with st.form("login_form"):
                 usuario = st.text_input("Usuario")
                 password = st.text_input("Contraseña", type="password")
+                mantener_sesion = st.checkbox("Mantener sesión iniciada", value=True)
                 submit = st.form_submit_button("ENTRAR", use_container_width=True)
 
             if submit:
@@ -1100,6 +1271,10 @@ def render_login():
                     auth_user = autenticar_usuario(usuario, password)
                     if auth_user:
                         st.session_state["auth_user"] = auth_user
+                        if mantener_sesion:
+                            guardar_token_recordado(crear_token_recordado(auth_user))
+                        else:
+                            borrar_token_recordado()
                         st.rerun()
                     else:
                         st.error("Usuario o contraseña incorrectos.")
@@ -1112,6 +1287,7 @@ def render_login():
                 nombre_negocio = st.text_input("Nombre del negocio opcional")
                 nuevo_password = st.text_input("Contraseña", type="password")
                 confirmar_password = st.text_input("Confirmar contraseña", type="password")
+                mantener_registro = st.checkbox("Mantener sesión iniciada", value=True, key="mantener_registro")
                 crear = st.form_submit_button("CREAR CUENTA", use_container_width=True)
 
             if crear:
@@ -1122,6 +1298,10 @@ def render_login():
                         auth_user = crear_usuario(nuevo_usuario, nuevo_password, nombre_negocio)
                         migrar_datos_iniciales(auth_user)
                         st.session_state["auth_user"] = auth_user
+                        if mantener_registro:
+                            guardar_token_recordado(crear_token_recordado(auth_user))
+                        else:
+                            borrar_token_recordado()
                         st.success("Cuenta creada.")
                         st.rerun()
                     except ValueError as exc:
@@ -1846,6 +2026,7 @@ perfil_default = {
     "direccion": ""
 }
 
+restaurar_sesion_recordada()
 usuario_actual = requerir_login()
 PROFILE_PATH, HISTORY_PATH = rutas_usuario(usuario_actual)
 
@@ -2318,14 +2499,12 @@ with tab_inicio:
         cta1, cta2 = st.columns([1,1])
 
         with cta1:
-            st.markdown("""
-            <div class="studio-card studio-primary">
-            <span>Creacion rapida</span>
-            <b>Crear una pieza nueva</b>
-            <span>Sube una foto real, define el objetivo y deja que Dago prepare texto + edición visual.</span>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("CREAR CONTENIDO AHORA", use_container_width=True):
+            if st.button(
+                "CREACION RAPIDA\n\nCrear una pieza nueva\n\nSube una foto real, define el objetivo y deja que Dago prepare texto + edicion visual.",
+                key="cta_crear_contenido",
+                use_container_width=True,
+                type="primary",
+            ):
                 st.session_state["mostrar_creador"] = True
                 st.session_state["crear_step"] = 1
                 st.session_state["ideas_sugeridas"] = None
@@ -2337,14 +2516,12 @@ with tab_inicio:
                 st.rerun()
 
         with cta2:
-            st.markdown("""
-            <div class="studio-card studio-secondary">
-            <span>Planificacion</span>
-            <b>Ordenar la semana</b>
-            <span>Genera una guía simple de qué publicar, cuándo hacerlo y con qué intención.</span>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("GENERAR PLAN SEMANAL", use_container_width=True):
+            if st.button(
+                "PLANIFICACION\n\nOrdenar la semana\n\nGenera una guia simple de que publicar, cuando hacerlo y con que intencion.",
+                key="cta_plan_semanal",
+                use_container_width=True,
+                type="primary",
+            ):
                 if not perfil.get("nombre"):
                     st.error("Primero guarda el perfil.")
                 else:

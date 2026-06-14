@@ -30,6 +30,7 @@ GROQ_API_KEY = "tu_clave_de_groq"
 RECRAFT_API_KEY = "tu_clave_de_recraft"
 SUPABASE_URL = "https://tu-proyecto.supabase.co"
 SUPABASE_SECRET_KEY = "tu_clave_secreta_de_supabase"
+DAGO_SESSION_SECRET = "una_frase_larga_y_privada_para_firmar_sesiones"
 ```
 
 5. Guarda y despliega.
@@ -65,6 +66,7 @@ Luego copia en los secretos de Streamlit:
 ```toml
 SUPABASE_URL = "https://tu-proyecto.supabase.co"
 SUPABASE_SECRET_KEY = "tu_clave_secreta_de_supabase"
+DAGO_SESSION_SECRET = "una_frase_larga_y_privada_para_firmar_sesiones"
 ```
 
 Con esas claves configuradas, Dago guarda en Supabase. Sin esas claves, usa archivos locales solo para pruebas.
