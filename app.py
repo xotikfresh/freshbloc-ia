@@ -539,6 +539,237 @@ div[data-testid="stImage"] img {
     .hero h1 {font-size:30px!important;}
     .home-card,.action-card,.home-main,.summary-box {border-radius:0 16px 0 16px!important;}
 }
+
+/* Visual v3: estudio mas claro y mas llamativo */
+.hero.app-hero {
+    align-items:stretch!important;
+    min-height:190px!important;
+    padding:28px!important;
+}
+.hero.app-hero .brand-lockup {
+    align-items:flex-start!important;
+    flex:1;
+}
+.hero-copy {
+    max-width:640px;
+}
+.hero-eyebrow {
+    display:inline-flex;
+    margin-bottom:8px;
+    color:#f5d0fe!important;
+    font-size:12px!important;
+    font-weight:900;
+    letter-spacing:.08em!important;
+    text-transform:uppercase;
+}
+.hero.app-hero h1 {
+    max-width:720px;
+    font-size:42px!important;
+    line-height:1.03!important;
+    margin-bottom:8px!important;
+}
+.hero-stats {
+    position:relative;
+    z-index:1;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    min-width:178px;
+    align-self:center;
+}
+.hero-stat {
+    background:rgba(255,255,255,.15);
+    border:1px solid rgba(255,255,255,.28);
+    border-radius:0 16px 0 16px;
+    padding:12px 14px;
+    backdrop-filter:blur(10px);
+}
+.hero-stat b {
+    display:block;
+    color:#fff!important;
+    font-size:24px;
+    line-height:1;
+}
+.hero-stat span {
+    display:block;
+    color:#f4eaff!important;
+    font-size:12px;
+    font-weight:800;
+    margin-top:5px;
+}
+.session-bar {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:-6px 0 18px;
+    color:#6b587d!important;
+    font-size:14px;
+}
+.session-dot {
+    width:10px;
+    height:10px;
+    border-radius:999px;
+    background:#10b981;
+    box-shadow:0 0 0 5px rgba(16,185,129,.12);
+}
+.section-title {
+    margin:6px 0 14px;
+}
+.section-title span {
+    color:#7c3aed!important;
+    font-size:12px!important;
+    font-weight:900;
+    letter-spacing:.07em!important;
+    text-transform:uppercase;
+}
+.section-title h2 {
+    margin:.15rem 0 0!important;
+    color:#251144!important;
+}
+.dashboard-intro {
+    min-height:190px;
+    padding:26px!important;
+}
+.dashboard-intro h2 {
+    font-size:34px!important;
+    color:#24103f!important;
+}
+.chip-row {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:14px;
+}
+.chip-row span {
+    display:inline-flex;
+    align-items:center;
+    min-height:30px;
+    padding:7px 10px;
+    background:#f4ecff;
+    border:1px solid #e7d7ff;
+    border-radius:999px;
+    color:#5b21b6!important;
+    font-size:12px;
+    font-weight:850;
+}
+.studio-card {
+    position:relative;
+    overflow:hidden;
+    min-height:180px;
+    padding:24px;
+    margin-bottom:12px;
+    color:#fff!important;
+    clip-path:polygon(0 0,calc(100% - 24px) 0,100% 24px,100% 100%,24px 100%,0 calc(100% - 24px));
+    box-shadow:0 22px 45px rgba(72,38,138,.20);
+}
+.studio-card * {color:#fff!important;}
+.studio-card:before {
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(130deg,rgba(255,255,255,.18),transparent 44%);
+}
+.studio-card:after {
+    content:"";
+    position:absolute;
+    right:-60px;
+    bottom:-72px;
+    width:220px;
+    height:220px;
+    border-radius:50%;
+    background:rgba(255,255,255,.13);
+}
+.studio-card b,.studio-card span,.studio-card p {position:relative;z-index:1;}
+.studio-card b {
+    display:block;
+    font-size:23px;
+    line-height:1.12;
+    margin:10px 0 8px;
+}
+.studio-card > span:first-child {
+    display:inline-flex;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.07em;
+    text-transform:uppercase;
+    color:#f5d0fe!important;
+}
+.studio-card b + span {
+    display:block;
+    color:#f5ecff!important;
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:0!important;
+    line-height:1.45;
+    text-transform:none;
+}
+.studio-card p {
+    color:#f5ecff!important;
+    font-size:14px;
+    margin:0;
+}
+.studio-primary {background:linear-gradient(135deg,#4c1d95 0%,#7c3aed 52%,#c026d3 100%);}
+.studio-secondary {background:linear-gradient(135deg,#312e81 0%,#6d28d9 58%,#0f9f8a 100%);}
+.format-tile {
+    position:relative;
+    overflow:hidden;
+    background:#fff;
+    border:1px solid #eadcff;
+    border-radius:0 18px 0 18px;
+    padding:20px;
+    min-height:164px;
+    margin-bottom:10px;
+    box-shadow:0 16px 34px rgba(72,38,138,.12);
+}
+.format-tile:before {
+    content:"";
+    position:absolute;
+    inset:0 auto 0 0;
+    width:6px;
+    background:linear-gradient(180deg,#7c3aed,#22c7aa);
+}
+.format-tile b {
+    display:block;
+    color:#251144!important;
+    font-size:22px;
+    margin-bottom:8px;
+}
+.format-tile span {
+    display:inline-flex;
+    margin-bottom:10px;
+    color:#7c3aed!important;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+}
+.format-tile p {
+    color:#645471!important;
+    margin:0!important;
+}
+.profile-banner {
+    background:linear-gradient(135deg,#ffffff,#fbf7ff);
+    border:1px solid #eadcff;
+    border-radius:0 18px 0 18px;
+    padding:20px;
+    margin-bottom:18px;
+    box-shadow:0 16px 34px rgba(72,38,138,.10);
+}
+.profile-banner b {
+    color:#251144!important;
+    font-size:22px;
+}
+.profile-banner p {
+    color:#756281!important;
+    margin:.35rem 0 0!important;
+}
+@media (max-width:760px) {
+    .hero.app-hero {padding:20px!important;min-height:unset!important;}
+    .hero.app-hero h1 {font-size:32px!important;}
+    .hero-stats {width:100%;grid-template-columns:1fr 1fr;}
+    .dashboard-intro h2 {font-size:28px!important;}
+    .studio-card,.format-tile,.profile-banner {clip-path:none;border-radius:0 16px 0 16px!important;}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1609,13 +1840,26 @@ if not isinstance(historial, list):
     historial = []
 historial = [item for item in historial if isinstance(item, dict)]
 
-st.markdown("""
-<div class="hero">
+modo_datos = "Base online activa" if supabase_activo() else "Modo local"
+
+st.markdown(f"""
+<div class="hero app-hero">
   <div class="brand-lockup">
     <div class="brand-mark">D</div>
-    <div>
-      <h1>Dago</h1>
-      <p class="small">Contenido listo para publicar con fotos reales del negocio.</p>
+    <div class="hero-copy">
+      <span class="hero-eyebrow">Dago Studio</span>
+      <h1>Contenido que se ve listo para vender</h1>
+      <p>Crea publicaciones e historias con foto real, texto comercial y formato Instagram en un solo flujo.</p>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <b>{len(historial)}</b>
+      <span>Piezas creadas</span>
+    </div>
+    <div class="hero-stat">
+      <b>1080</b>
+      <span>Formato Instagram</span>
     </div>
   </div>
 </div>
@@ -1657,11 +1901,25 @@ def render_creador():
 
             c1, c2 = st.columns(2)
             with c1:
+                st.markdown("""
+                <div class="format-tile">
+                  <span>Feed</span>
+                  <b>Publicacion cuadrada</b>
+                  <p>Ideal para promocion, producto, anuncio o pieza que queda en el perfil. Salida 1080 x 1080.</p>
+                </div>
+                """, unsafe_allow_html=True)
                 if st.button("PUBLICACIÓN", use_container_width=True):
                     st.session_state["crear_formato"] = "Publicación"
                     st.session_state["crear_step"] = 2
                     st.rerun()
             with c2:
+                st.markdown("""
+                <div class="format-tile">
+                  <span>Story</span>
+                  <b>Historia vertical</b>
+                  <p>Perfecta para urgencia, encuesta, disponibilidad o recordatorio rapido. Salida 1080 x 1920.</p>
+                </div>
+                """, unsafe_allow_html=True)
                 if st.button("HISTORIA", use_container_width=True):
                     st.session_state["crear_formato"] = "Historia"
                     st.session_state["crear_step"] = 2
@@ -2007,7 +2265,12 @@ with tab_inicio:
         render_creador()
 
     else:
-        st.markdown("## Panel de control")
+        st.markdown("""
+        <div class="section-title">
+          <span>Panel de control</span>
+          <h2>Tu estudio de contenido</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
         if perfil.get("nombre"):
             negocio = perfil.get("nombre")
@@ -2018,6 +2281,11 @@ with tab_inicio:
             <div class="home-main">
             <span class="card-kicker">Negocio activo</span>
             <h2>Hola, {h(negocio)}</h2>
+            <div class="chip-row">
+              <span>{h(rubro)}</span>
+              <span>Tono {h(tono)}</span>
+              <span>{len(historial)} piezas</span>
+            </div>
             <p class="small">Dago está listo para crear contenido para tu {h(str(rubro).lower())} con tono {h(str(tono).lower())}.</p>
             </div>
             """, unsafe_allow_html=True)
@@ -2034,7 +2302,8 @@ with tab_inicio:
 
         with cta1:
             st.markdown("""
-            <div class="action-card action-primary">
+            <div class="studio-card studio-primary">
+            <span>Creacion rapida</span>
             <b>Crear una pieza nueva</b>
             <span>Sube una foto real, define el objetivo y deja que Dago prepare texto + edición visual.</span>
             </div>
@@ -2052,7 +2321,8 @@ with tab_inicio:
 
         with cta2:
             st.markdown("""
-            <div class="action-card action-secondary">
+            <div class="studio-card studio-secondary">
+            <span>Planificacion</span>
             <b>Ordenar la semana</b>
             <span>Genera una guía simple de qué publicar, cuándo hacerlo y con qué intención.</span>
             </div>
@@ -2121,6 +2391,12 @@ with tab_inicio:
 
 with tab_perfil:
     st.markdown("## Perfil único del negocio")
+    st.markdown("""
+    <div class="profile-banner">
+      <b>Datos que hacen que Dago no invente</b>
+      <p>Mientras mas claro este el rubro, publico, servicios y horarios, mejores salen las ideas, captions e imagenes.</p>
+    </div>
+    """, unsafe_allow_html=True)
     c1,c2 = st.columns(2)
     with c1:
         perfil["nombre"] = st.text_input("Nombre del negocio", value=perfil.get("nombre",""))
