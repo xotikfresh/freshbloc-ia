@@ -27,6 +27,7 @@ INSTAGRAM_POST_SIZE = (1080, 1080)
 INSTAGRAM_STORY_SIZE = (1080, 1920)
 MAX_HISTORY_ITEMS = 200
 HISTORY_CONTEXT_ITEMS = 8
+SUPABASE_TIMEOUT = 12
 
 Image.MAX_IMAGE_PIXELS = 40_000_000
 
@@ -569,6 +570,103 @@ def leer_secreto(nombre):
     except Exception:
         return os.getenv(nombre, "")
 
+def supabase_config():
+    url = leer_secreto("SUPABASE_URL").strip().rstrip("/")
+    key = (
+        leer_secreto("SUPABASE_SECRET_KEY").strip()
+        or leer_secreto("SUPABASE_SERVICE_ROLE_KEY").strip()
+        or leer_secreto("SUPABASE_KEY").strip()
+    )
+    return url, key
+
+def supabase_activo():
+    url, key = supabase_config()
+    return bool(url and key)
+
+def supabase_headers(prefer=""):
+    _, key = supabase_config()
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    if prefer:
+        headers["Prefer"] = prefer
+    return headers
+
+def supabase_request(method, tabla, params=None, payload=None, prefer=""):
+    url, _ = supabase_config()
+    if not url:
+        raise RuntimeError("Falta configurar SUPABASE_URL.")
+    endpoint = f"{url}/rest/v1/{tabla}"
+    try:
+        response = requests.request(
+            method,
+            endpoint,
+            headers=supabase_headers(prefer),
+            params=params,
+            json=payload,
+            timeout=SUPABASE_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError("No pude conectar con Supabase. Revisa la URL y la clave.") from exc
+
+    if response.status_code >= 400:
+        detalle = response.text[:240] if response.text else response.reason
+        raise RuntimeError(f"Supabase respondio con error {response.status_code}: {detalle}")
+    if not response.text:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+def supabase_obtener_usuario(usuario):
+    rows = supabase_request(
+        "GET",
+        "dago_users",
+        params={
+            "select": "username,salt,password_hash,nombre_negocio,creado",
+            "username": f"eq.{usuario}",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+def supabase_insertar_usuario(usuario, registro):
+    payload = {
+        "username": usuario,
+        "salt": registro["salt"],
+        "password_hash": registro["password_hash"],
+        "nombre_negocio": registro.get("nombre_negocio", ""),
+        "creado": registro.get("creado", ""),
+    }
+    supabase_request("POST", "dago_users", payload=payload)
+
+def supabase_cargar_json(tabla, usuario, default):
+    rows = supabase_request(
+        "GET",
+        tabla,
+        params={"select": "data", "username": f"eq.{usuario}", "limit": "1"},
+    )
+    if not rows:
+        return default
+    data = rows[0].get("data", default)
+    return data if data is not None else default
+
+def supabase_guardar_json(tabla, usuario, data):
+    payload = {
+        "username": usuario,
+        "data": data,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    supabase_request(
+        "POST",
+        tabla,
+        payload=payload,
+        prefer="resolution=merge-duplicates",
+    )
+
 def normalizar_usuario(usuario):
     limpio = "".join(c for c in str(usuario or "").strip().lower() if c.isalnum() or c in ("_", "-", "."))
     return limpio[:40]
@@ -605,24 +703,35 @@ def crear_usuario(usuario, password, nombre_negocio=""):
     if len(str(password or "")) < 6:
         raise ValueError("La contraseña debe tener al menos 6 caracteres.")
 
-    data = cargar_usuarios()
-    if usuario in data["usuarios"]:
-        raise ValueError("Ese usuario ya existe.")
-
     salt, digest = hash_password(password)
-    data["usuarios"][usuario] = {
+    registro = {
         "salt": salt,
         "password_hash": digest,
         "nombre_negocio": str(nombre_negocio or "").strip(),
         "creado": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
+
+    if supabase_activo():
+        if supabase_obtener_usuario(usuario):
+            raise ValueError("Ese usuario ya existe.")
+        supabase_insertar_usuario(usuario, registro)
+        return usuario
+
+    data = cargar_usuarios()
+    if usuario in data["usuarios"]:
+        raise ValueError("Ese usuario ya existe.")
+
+    data["usuarios"][usuario] = registro
     guardar_usuarios(data)
     return usuario
 
 def autenticar_usuario(usuario, password):
     usuario = normalizar_usuario(usuario)
-    data = cargar_usuarios()
-    registro = data["usuarios"].get(usuario)
+    if supabase_activo():
+        registro = supabase_obtener_usuario(usuario)
+    else:
+        data = cargar_usuarios()
+        registro = data["usuarios"].get(usuario)
     if not registro:
         return None
     if verificar_password(password, registro.get("salt", ""), registro.get("password_hash", "")):
@@ -640,6 +749,20 @@ def rutas_usuario(usuario):
 
 def migrar_datos_iniciales(usuario):
     profile_path, history_path = rutas_usuario(usuario)
+    if supabase_activo():
+        perfil_online = supabase_cargar_json("dago_profiles", usuario, {})
+        if not perfil_online and os.path.exists(os.path.join(DATA_DIR, "perfil_negocio.json")):
+            perfil_existente = load_json(os.path.join(DATA_DIR, "perfil_negocio.json"), {})
+            if isinstance(perfil_existente, dict) and perfil_existente:
+                supabase_guardar_json("dago_profiles", usuario, perfil_existente)
+
+        historial_online = supabase_cargar_json("dago_histories", usuario, [])
+        if not historial_online and os.path.exists(os.path.join(DATA_DIR, "historial.json")):
+            historial_existente = load_json(os.path.join(DATA_DIR, "historial.json"), [])
+            if isinstance(historial_existente, list):
+                supabase_guardar_json("dago_histories", usuario, historial_existente)
+        return
+
     if not os.path.exists(profile_path) and os.path.exists(os.path.join(DATA_DIR, "perfil_negocio.json")):
         perfil_existente = load_json(os.path.join(DATA_DIR, "perfil_negocio.json"), {})
         if isinstance(perfil_existente, dict) and perfil_existente:
@@ -648,6 +771,30 @@ def migrar_datos_iniciales(usuario):
         historial_existente = load_json(os.path.join(DATA_DIR, "historial.json"), [])
         if isinstance(historial_existente, list):
             save_json(history_path, historial_existente)
+
+def cargar_perfil_usuario(usuario, profile_path):
+    if supabase_activo():
+        data = supabase_cargar_json("dago_profiles", usuario, {})
+        return data if isinstance(data, dict) else {}
+    return load_json(profile_path, {})
+
+def guardar_perfil_usuario(usuario, profile_path, perfil):
+    if supabase_activo():
+        supabase_guardar_json("dago_profiles", usuario, perfil)
+        return
+    save_json(profile_path, perfil)
+
+def cargar_historial_usuario(usuario, history_path):
+    if supabase_activo():
+        data = supabase_cargar_json("dago_histories", usuario, [])
+        return data if isinstance(data, list) else []
+    return load_json(history_path, [])
+
+def guardar_historial_usuario(usuario, history_path, historial):
+    if supabase_activo():
+        supabase_guardar_json("dago_histories", usuario, historial)
+        return
+    save_json(history_path, historial)
 
 def cerrar_sesion():
     for key in [
@@ -1454,10 +1601,10 @@ perfil_default = {
 usuario_actual = requerir_login()
 PROFILE_PATH, HISTORY_PATH = rutas_usuario(usuario_actual)
 
-perfil_guardado = load_json(PROFILE_PATH, {})
+perfil_guardado = cargar_perfil_usuario(usuario_actual, PROFILE_PATH)
 perfil = {**perfil_default, **perfil_guardado} if isinstance(perfil_guardado, dict) else perfil_default.copy()
 
-historial = load_json(HISTORY_PATH, [])
+historial = cargar_historial_usuario(usuario_actual, HISTORY_PATH)
 if not isinstance(historial, list):
     historial = []
 historial = [item for item in historial if isinstance(item, dict)]
@@ -1764,7 +1911,7 @@ def render_creador():
                             "gancho": data.get("gancho_visual","")
                         })
                         del historial[:-MAX_HISTORY_ITEMS]
-                        save_json(HISTORY_PATH, historial)
+                        guardar_historial_usuario(usuario_actual, HISTORY_PATH, historial)
 
             if "post_buffer" in st.session_state:
                 cbtn1, cbtn2 = st.columns(2)
@@ -1990,7 +2137,7 @@ with tab_perfil:
         perfil["whatsapp"] = st.text_input("WhatsApp del negocio opcional", value=perfil.get("whatsapp",""))
         perfil["direccion"] = st.text_input("Dirección del negocio opcional", value=perfil.get("direccion",""), placeholder="Ej: 5 Norte 123, Viña del Mar")
     if st.button("GUARDAR PERFIL"):
-        save_json(PROFILE_PATH, perfil)
+        guardar_perfil_usuario(usuario_actual, PROFILE_PATH, perfil)
         st.success("Perfil guardado.")
 
 with tab_historial:

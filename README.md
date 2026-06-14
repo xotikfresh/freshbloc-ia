@@ -28,9 +28,46 @@ streamlit run app.py
 ```toml
 GROQ_API_KEY = "tu_clave_de_groq"
 RECRAFT_API_KEY = "tu_clave_de_recraft"
+SUPABASE_URL = "https://tu-proyecto.supabase.co"
+SUPABASE_SECRET_KEY = "tu_clave_secreta_de_supabase"
 ```
 
 5. Guarda y despliega.
+
+## Base de datos permanente con Supabase
+
+Para que los usuarios, perfiles e historial sobrevivan a reinicios o cambios de host, crea un proyecto en Supabase y ejecuta este SQL en el editor SQL:
+
+```sql
+create table if not exists public.dago_users (
+  username text primary key,
+  salt text not null,
+  password_hash text not null,
+  nombre_negocio text default '',
+  creado text default ''
+);
+
+create table if not exists public.dago_profiles (
+  username text primary key references public.dago_users(username) on delete cascade,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.dago_histories (
+  username text primary key references public.dago_users(username) on delete cascade,
+  data jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+```
+
+Luego copia en los secretos de Streamlit:
+
+```toml
+SUPABASE_URL = "https://tu-proyecto.supabase.co"
+SUPABASE_SECRET_KEY = "tu_clave_secreta_de_supabase"
+```
+
+Con esas claves configuradas, Dago guarda en Supabase. Sin esas claves, usa archivos locales solo para pruebas.
 
 ## Archivos importantes
 
